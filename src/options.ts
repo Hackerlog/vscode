@@ -1,14 +1,53 @@
-import * as path from 'path';
-import * as fs from 'fs';
+import * as path from "path";
+import * as fs from "fs";
+import * as get from "lodash/get";
+import * as noop from "lodash/noop";
+import * as assign from "lodash/assign";
 
-import Dependencies from './dependencies';
+import Dependencies from "./dependencies";
+import Logger from "./logger";
+
+export enum Settings {
+  StatusBarIcon = "statusBarIcon",
+  EditorKey = "editorKey",
+  Proxy = "proxy",
+  Debug = "debug"
+}
+
+interface ISettings {
+  [Settings.StatusBarIcon]: string | undefined;
+  [Settings.EditorKey]: string | undefined;
+  [Settings.Proxy]: string | undefined;
+  [Settings.Debug]: boolean | undefined;
+}
 
 export default class Options {
-  private configFile = path.join(this.getWakaHome(), '.hackerlog.cfg');
-  private logFile = path.join(this.getWakaHome(), '.hackerlog.log');
+  private configFile = path.join(this.getHome(), ".hackerlog.config.json");
+  private logFile = path.join(this.getHome(), ".hackerlog.log");
+  private settings: ISettings | null = null;
+  private logger: Logger;
 
-  private getWakaHome(): string {
-    let home = process.env.WAKATIME_HOME;
+  public constructor(logger: Logger) {
+    this.logger = logger;
+    this.loadConfig();
+  }
+
+  private loadConfig(): void {
+    fs.readFile(
+      this.getConfigFile(),
+      "utf-8",
+      (err: NodeJS.ErrnoException, content: string) => {
+        if (err) {
+          this.logger.error("Could not load settings file" + err);
+        } else {
+          this.settings = JSON.parse(content);
+        }
+      }
+    );
+  }
+
+  private getHome(): string {
+    let home = process.env.HACKERLOG_HOME;
     if (home) {
       return home;
     } else {
@@ -16,88 +55,30 @@ export default class Options {
     }
   }
 
-  public getSetting(section: string, key: string, callback: (string, any) => void): void {
-    fs.readFile(this.getConfigFile(), 'utf-8', (err: NodeJS.ErrnoException, content: string) => {
-      if (err) {
-        if (callback) callback(new Error('could not read ' + this.getConfigFile()), null);
-      } else {
-        let currentSection = '';
-        let lines = content.split('\n');
-        for (var i = 0; i < lines.length; i++) {
-          let line = lines[i];
-          if (this.startsWith(line.trim(), '[') && this.endsWith(line.trim(), ']')) {
-            currentSection = line
-              .trim()
-              .substring(1, line.trim().length - 1)
-              .toLowerCase();
-          } else if (currentSection === section) {
-            let parts = line.split('=');
-            let currentKey = parts[0].trim();
-            if (currentKey === key && parts.length > 1) {
-              if (callback) callback(null, parts[1].trim());
-              return;
-            }
-          }
-        }
-
-        if (callback) callback(null, null);
-      }
-    });
+  public getSetting(
+    key: Settings,
+    callback: (string?, any?) => void = noop
+  ): void {
+    callback(get(this.settings, key));
   }
 
-  public setSetting(section: string, key: string, val: string, callback?: (Error) => void): void {
-    fs.readFile(this.getConfigFile(), 'utf-8', (err: NodeJS.ErrnoException, content: string) => {
-      // ignore errors because config file might not exist yet
-      if (err) content = '';
-
-      let contents = [];
-      let currentSection = '';
-
-      let found = false;
-      let lines = content.split('\n');
-      for (var i = 0; i < lines.length; i++) {
-        let line = lines[i];
-        if (this.startsWith(line.trim(), '[') && this.endsWith(line.trim(), ']')) {
-          if (currentSection === section && !found) {
-            contents.push(key + ' = ' + val);
-            found = true;
-          }
-          currentSection = line
-            .trim()
-            .substring(1, line.trim().length - 1)
-            .toLowerCase();
-          contents.push(line);
-        } else if (currentSection === section) {
-          let parts = line.split('=');
-          let currentKey = parts[0].trim();
-          if (currentKey === key) {
-            if (!found) {
-              contents.push(key + ' = ' + val);
-              found = true;
-            }
-          } else {
-            contents.push(line);
-          }
-        } else {
-          contents.push(line);
-        }
-      }
-
-      if (!found) {
-        if (currentSection !== section) {
-          contents.push('[' + section + ']');
-        }
-        contents.push(key + ' = ' + val);
-      }
-
-      fs.writeFile(this.getConfigFile(), contents.join('\n'), function(err2) {
+  public setSetting(
+    key: Settings,
+    val: string,
+    callback: (Error) => void = noop
+  ): void {
+    const content = assign({}, this.settings, { [key]: val });
+    fs.writeFile(
+      this.getConfigFile(),
+      JSON.stringify(content, null, 4),
+      function(err) {
         if (err) {
-          if (callback) callback(new Error('could not write to ' + this.getConfigFile()));
+          callback(new Error("could not write to " + this.getConfigFile()));
         } else {
-          if (callback) callback(null);
+          callback(null);
         }
-      });
-    });
+      }
+    );
   }
 
   public getConfigFile(): string {
@@ -109,14 +90,6 @@ export default class Options {
   }
 
   public getUserHomeDir(): string {
-    return process.env[Dependencies.isWindows() ? 'USERPROFILE' : 'HOME'] || '';
-  }
-
-  public startsWith(outer: string, inner: string): boolean {
-    return outer.slice(0, inner.length) === inner;
-  }
-
-  public endsWith(outer: string, inner: string): boolean {
-    return inner === '' || outer.slice(-inner.length) === inner;
+    return process.env[Dependencies.isWindows() ? "USERPROFILE" : "HOME"] || "";
   }
 }

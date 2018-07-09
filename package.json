@@ -14,6 +14,28 @@
         "onCommand:extension.sayHello"
     ],
     "main": "./dist/index",
+    "scripts": {
+        "vscode:prepublish": "yarn build",
+        "build": "tsc -p ./",
+        "start": "tsc -watch -p ./",
+        "postinstall": "node ./node_modules/vscode/bin/install",
+        "test": "yarn build && node ./node_modules/vscode/bin/test",
+        "lint": "tslint -p tslint.json",
+        "lint:fix": "tslint -p tslint.json --fix"
+    },
+    "devDependencies": {
+        "@types/jest": "^23.1.4",
+        "@types/node": "^7.0.43",
+        "jest": "^23.3.0",
+        "tslint": "^5.8.0",
+        "typescript": "^2.6.1",
+        "vscode": "^1.1.6"
+    },
+    "dependencies": {
+        "adm-zip": "^0.4.11",
+        "lodash": "^4.17.10",
+        "request": "^2.87.0"
+    },
     "contributes": {
         "commands": [
             {
@@ -37,23 +59,5 @@
                 "title": "Hackerlog Dashboard"
             }
         ]
-    },
-    "scripts": {
-        "vscode:prepublish": "yarn build",
-        "build": "tsc -p ./",
-        "watch": "tsc -watch -p ./",
-        "postinstall": "node ./node_modules/vscode/bin/install",
-        "test": "yarn build && node ./node_modules/vscode/bin/test"
-    },
-    "devDependencies": {
-        "@types/jest": "^23.1.4",
-        "@types/node": "^7.0.43",
-        "jest": "^23.3.0",
-        "tslint": "^5.8.0",
-        "typescript": "^2.6.1",
-        "vscode": "^1.1.6"
-    },
-    "dependencies": {
-        "adm-zip": "^0.4.11"
     }
 }
