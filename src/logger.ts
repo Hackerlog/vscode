@@ -1,62 +1,82 @@
+import * as Raven from "raven";
+import * as get from "lodash/get";
+
+export enum Levels {
+  debug = "debug",
+  info = "info",
+  warn = "warn",
+  error = "error"
+}
+
 export default class Logger {
-  private level: string;
-  private levels = {
-    debug: 0,
-    info: 1,
-    warn: 2,
-    error: 3
+  private level: Levels;
+  private levelAmount = {
+    [Levels.debug]: 0,
+    [Levels.info]: 1,
+    [Levels.warn]: 2,
+    [Levels.error]: 4
   };
 
-  constructor(level: string) {
+  constructor(level: Levels, vscode) {
     this.setLevel(level);
+    Raven.config(
+      "https://0f033463374047f3ba843c0a8d84ee68:72e61a3d48a949b093dd4574bb6ca79b@sentry.io/1239966",
+      {
+        release: this.getVersion(vscode),
+        tags: {
+          os: process.platform,
+          arch: process.arch
+        }
+      }
+    ).install();
   }
 
-  public setLevel(level: string): void {
-    if (level in this.levels) {
-      this.level = level;
-    } else {
-      throw new TypeError("Invalid level: " + level);
-    }
+  private getVersion(vscode): string {
+    const packageJson = vscode.extensions.getExtension("hackerlog.hackerlog")
+      .packageJSON;
+    return get(packageJson, "version");
+  }
+
+  public setLevel(level: Levels): void {
+    this.level = level;
   }
 
   public log(level: string, msg: string): void {
-    if (!(level in this.levels)) {
-      throw new TypeError("Invalid level: " + level);
-    }
-
-    const current: number = this.levels[level];
-    const cutoff: number = this.levels[this.level];
-
-    if (current >= cutoff) {
+    if (this.levelAmount[level] >= this.levelAmount[this.level]) {
       msg = "[Hackerlog] [" + level.toUpperCase() + "] " + msg;
-      if (level === "debug") {
+      if (level === Levels.debug) {
         console.log(msg);
       }
-      if (level === "info") {
+      if (level === Levels.info) {
         console.info(msg);
       }
-      if (level === "warn") {
+      if (level === Levels.warn) {
+        Raven.captureMessage(msg);
         console.warn(msg);
       }
-      if (level === "error") {
+      if (level === Levels.error) {
+        Raven.captureMessage(msg);
         console.error(msg);
       }
     }
   }
 
   public debug(msg: string): void {
-    this.log("debug", msg);
+    this.log(Levels.debug, msg);
   }
 
   public info(msg: string): void {
-    this.log("info", msg);
+    this.log(Levels.info, msg);
   }
 
   public warn(msg: string): void {
-    this.log("warn", msg);
+    this.log(Levels.warn, msg);
   }
 
-  public error(msg: string): void {
-    this.log("error", msg);
+  public error(msg: string, err: Error | null = null): void {
+    this.log(Levels.error, msg);
+    if (err) {
+      Raven.captureException(err);
+    }
   }
 }

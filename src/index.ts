@@ -3,50 +3,50 @@
 import * as vscode from "vscode";
 
 import Hackerlog from "./hackerlog";
-import Logger from "./logger";
+import Logger, { Levels } from "./logger";
 import Options, { Settings } from "./options";
 
-var logger: Logger;
-var options: Options;
+let logger: Logger;
+let options: Options;
 
 // this method is called when your extension is activated. activation is
 // controlled by the activation events defined in package.json
 export function activate(ctx: vscode.ExtensionContext) {
-  logger = new Logger("info");
+  logger = new Logger(Levels.info, vscode);
   options = new Options(logger);
 
-  let hackerlog = new Hackerlog({
+  const hackerlog = new Hackerlog({
     vscode,
-    logger: new Logger("info"),
-    options: new Options(logger)
+    logger,
+    options
   });
 
   ctx.subscriptions.push(
-    vscode.commands.registerCommand("hackerlog.editorKey", function(args) {
-      hackerlog.promptForApiKey();
+    vscode.commands.registerCommand("hackerlog.editorKey", () => {
+      hackerlog.promptForEditorToken();
     })
   );
 
   ctx.subscriptions.push(
-    vscode.commands.registerCommand("hackerlog.proxy", function(args) {
+    vscode.commands.registerCommand("hackerlog.proxy", () => {
       hackerlog.promptForProxy();
     })
   );
 
   ctx.subscriptions.push(
-    vscode.commands.registerCommand("hackerlog.debug", function(args) {
+    vscode.commands.registerCommand("hackerlog.debug", () => {
       hackerlog.promptForDebug();
     })
   );
 
   ctx.subscriptions.push(
-    vscode.commands.registerCommand("hackerlog.statusBarIcon", function(args) {
+    vscode.commands.registerCommand("hackerlog.statusBarIcon", () => {
       hackerlog.promptStatusBarIcon();
     })
   );
 
   ctx.subscriptions.push(
-    vscode.commands.registerCommand("hackerlog.dashboard", function(args) {
+    vscode.commands.registerCommand("hackerlog.dashboard", () => {
       hackerlog.openDashboardWebsite();
     })
   );
@@ -55,8 +55,8 @@ export function activate(ctx: vscode.ExtensionContext) {
   ctx.subscriptions.push(hackerlog);
 
   options.getSetting(Settings.Debug, debug => {
-    if (debug) {
-      logger.setLevel("debug");
+    if (debug || process.env.IS_DEBUG === "true") {
+      logger.setLevel(Levels.debug);
     }
     hackerlog.initialize();
   });

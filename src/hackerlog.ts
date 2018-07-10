@@ -1,29 +1,35 @@
 import * as os from "os";
 import * as child_process from "child_process";
 import * as vscode from "vscode";
+import * as path from "path";
 
 import Dependencies from "./dependencies";
 import Options, { Settings } from "./options";
+import Pulse from "./pulse";
+import { PassThrough } from "stream";
 
 export default class Hackerlog {
   private vscode;
   private logger;
-
-  private extension = this.vscode.extensions.getExtension("Hackerlog.hackerlog")
-    .packageJSON;
-  private statusBar: vscode.StatusBarItem = this.vscode.window.createStatusBarItem(
-    this.vscode.StatusBarAlignment.Left
-  );
+  private extension;
+  private statusBar;
   private disposable: vscode.Disposable;
   private lastFile: string;
   private lastPulse: number = 0;
   private dependencies: Dependencies;
   private options: Options;
+  private pulseEndpoint = "http://localhost:8000/v1/units";
 
   constructor({ vscode, logger, options }) {
     this.vscode = vscode;
     this.logger = logger;
     this.options = options;
+    this.extension = vscode.extensions.getExtension(
+      "hackerlog.hackerlog"
+    ).packageJSON;
+    this.statusBar = vscode.StatusBarItem = vscode.window.createStatusBarItem(
+      vscode.StatusBarAlignment.Left
+    );
   }
 
   public initialize(): void {
@@ -49,7 +55,7 @@ export default class Hackerlog {
     this.setupEventListeners();
   }
 
-  public promptForApiKey(): void {
+  public promptForEditorToken(): void {
     this.options.getSetting(Settings.EditorKey, defaultVal => {
       if (this.validateKey(defaultVal) !== null) {
         defaultVal = "";
@@ -205,16 +211,16 @@ export default class Hackerlog {
   }
 
   private checkApiKey(): void {
-    this.hasApiKey(hasApiKey => {
+    this.hasEditorToken(hasApiKey => {
       if (!hasApiKey) {
-        this.promptForApiKey();
+        this.promptForEditorToken();
       }
     });
   }
 
-  private hasApiKey(callback: (boolean) => void): void {
+  private hasEditorToken(callback: (boolean, string) => void): void {
     this.options.getSetting(Settings.EditorKey, editorKey => {
-      callback(this.validateKey(editorKey) === null);
+      callback(editorKey !== null, editorKey);
     });
   }
 
@@ -272,98 +278,77 @@ export default class Hackerlog {
   }
 
   private sendPulse(file: string, isWrite): void {
-    this.hasApiKey(hasApiKey => {
-      if (hasApiKey) {
-        // FIXME: Use the core here
+    this.hasEditorToken((hasEditorToken, editorToken) => {
+      if (hasEditorToken) {
         this.dependencies.checkAndCreateHomeDir(coreIsInstalled => {
           if (coreIsInstalled) {
-            let core = this.dependencies.getCoreLocation();
-            let user_agent =
-              "vscode/" +
-              this.vscode.version +
-              " vscode-Hackerlog/" +
-              this.extension.version;
-            let args = [core, "--file", file, "--plugin", user_agent];
-            let project = this.getProjectName(file);
-            if (project) {
-              args.push("--alternate-project", project);
-            }
-            if (isWrite) {
-              args.push("--write");
-            }
-            if (Dependencies.isWindows()) {
-              args.push(
-                "--config",
-                this.options.getConfigFile(),
-                "--logfile",
-                this.options.getLogFile()
-              );
-            }
+            const coreLocation = this.dependencies.getCoreLocation();
+            const splitFile = file.split(path.sep);
+            const fileName = splitFile[splitFile.length - 1];
 
-            this.logger.debug(
-              "Sending heartbeat: " + this.formatArguments(pythonBinary, args)
-            );
+            const flags = {
+              apiUrl: this.pulseEndpoint,
+              editorToken,
+              editorType: "vscode",
+              projectName: this.getProjectName(file),
+              fileName,
+              startedAt: new Date(this.lastPulse).toISOString(),
+              stoppedAt: new Date().toISOString()
+            };
 
-            let process = child_process.execFile(
-              pythonBinary,
-              args,
-              (error, stdout, stderr) => {
-                if (error !== null) {
-                  if (stderr && stderr.toString() !== "") {
-                    this.logger.error(stderr.toString());
-                  }
-                  if (stdout && stdout.toString() !== "") {
-                    this.logger.error(stdout.toString());
-                  }
-                  this.logger.error(error.toString());
-                }
-              }
-            );
-            process.on("close", (code, signal) => {
-              if (code === 0) {
-                this.statusBar.text = "$(clock)";
-                let today = new Date();
-                this.statusBar.tooltip =
-                  "Hackerlog: Last heartbeat sent " + this.formatDate(today);
-              } else if (code === 102) {
-                this.statusBar.text = "$(clock)";
-                this.statusBar.tooltip =
-                  "Hackerlog: Working offline... coding activity will sync next time we are online.";
-                this.logger.warn(
-                  "API Error (102); Check your " +
+            const pulse = new Pulse({
+              flags,
+              coreLocation,
+              logger: this.logger
+            });
+
+            pulse.run(process => {
+              process.on("close", (code, signal) => {
+                if (code === 0) {
+                  this.statusBar.text = "$(clock)";
+                  let today = new Date();
+                  this.statusBar.tooltip =
+                    "Hackerlog: Last heartbeat sent " + this.formatDate(today);
+                } else if (code === 102) {
+                  this.statusBar.text = "$(clock)";
+                  this.statusBar.tooltip =
+                    "Hackerlog: Working offline... coding activity will sync next time we are online.";
+                  this.logger.warn(
+                    "API Error (102); Check your " +
+                      this.options.getLogFile() +
+                      " file for more details."
+                  );
+                } else if (code === 103) {
+                  this.statusBar.text = "$(clock) Hackerlog Error";
+                  let error_msg =
+                    "Config Parsing Error (103); Check your " +
                     this.options.getLogFile() +
-                    " file for more details."
-                );
-              } else if (code === 103) {
-                this.statusBar.text = "$(clock) Hackerlog Error";
-                let error_msg =
-                  "Config Parsing Error (103); Check your " +
-                  this.options.getLogFile() +
-                  " file for more details.";
-                this.statusBar.tooltip = "Hackerlog: " + error_msg;
-                this.logger.error(error_msg);
-              } else if (code === 104) {
-                this.statusBar.text = "$(clock) Hackerlog Error";
-                let error_msg =
-                  "Invalid API Key (104); Make sure your API Key is correct!";
-                this.statusBar.tooltip = "Hackerlog: " + error_msg;
-                this.logger.error(error_msg);
-              } else {
-                this.statusBar.text = "$(clock) Hackerlog Error";
-                let error_msg =
-                  "Unknown Error (" +
-                  code +
-                  "); Check your " +
-                  this.options.getLogFile() +
-                  " file for more details.";
-                this.statusBar.tooltip = "Hackerlog: " + error_msg;
-                this.logger.error(error_msg);
-              }
+                    " file for more details.";
+                  this.statusBar.tooltip = "Hackerlog: " + error_msg;
+                  this.logger.error(error_msg);
+                } else if (code === 104) {
+                  this.statusBar.text = "$(clock) Hackerlog Error";
+                  let error_msg =
+                    "Invalid API Key (104); Make sure your API Key is correct!";
+                  this.statusBar.tooltip = "Hackerlog: " + error_msg;
+                  this.logger.error(error_msg);
+                } else {
+                  this.statusBar.text = "$(clock) Hackerlog Error";
+                  let error_msg =
+                    "Unknown Error (" +
+                    code +
+                    "); Check your " +
+                    this.options.getLogFile() +
+                    " file for more details.";
+                  this.statusBar.tooltip = "Hackerlog: " + error_msg;
+                  this.logger.error(error_msg);
+                }
+              });
             });
           }
         });
       } else {
-        this.promptForApiKey();
+        this.promptForEditorToken();
       }
     });
   }
@@ -413,16 +398,23 @@ export default class Hackerlog {
   }
 
   private getProjectName(file: string): string {
-    let uri = this.vscode.Uri.file(file);
-    let workspaceFolder = this.vscode.workspace.getWorkspaceFolder(uri);
+    const uri = this.vscode.Uri.file(file);
+    const workspaceFolder = this.vscode.workspace.getWorkspaceFolder(uri);
+    const defaultName = "unknown-project";
     if (this.vscode.workspace && workspaceFolder) {
       try {
+        if (!workspaceFolder.name) {
+          return defaultName;
+        }
         return workspaceFolder.name;
-      } catch (e) {}
+      } catch (e) {
+        return defaultName;
+      }
     }
-    return null;
+    return defaultName;
   }
 
+  // TODO: Maybe use this?
   private obfuscateKey(key: string): string {
     let newKey = "";
     if (key) {
@@ -433,28 +425,5 @@ export default class Hackerlog {
       }
     }
     return newKey;
-  }
-
-  private wrapArg(arg: string): string {
-    if (arg.indexOf(" ") > -1) {
-      return '"' + arg.replace(/"/g, '\\"') + '"';
-    }
-    return arg;
-  }
-
-  private formatArguments(python: string, args: string[]): string {
-    let clone = args.slice(0);
-    clone.unshift(this.wrapArg(python));
-    let newCmds = [];
-    let lastCmd = "";
-    for (let i = 0; i < clone.length; i++) {
-      if (lastCmd === "--key") {
-        newCmds.push(this.wrapArg(this.obfuscateKey(clone[i])));
-      } else {
-        newCmds.push(this.wrapArg(clone[i]));
-      }
-      lastCmd = clone[i];
-    }
-    return newCmds.join(" ");
   }
 }

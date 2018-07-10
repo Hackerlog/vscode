@@ -5,43 +5,86 @@ import * as os from "os";
 import Options, { Settings } from "./options";
 import Logger from "./logger";
 
+enum Os {
+  Linux = "linux",
+  Darwin = "darwin",
+  Windows = "windows",
+  NotSupported = "not-supported"
+}
+
+enum Arch {
+  I386 = "386",
+  Amd64 = "amd64",
+  NotSupported = "not-supported"
+}
+
 export default class Dependencies {
   private options: Options;
   private logger: Logger;
   private dirname = __dirname;
   private homeDir: string;
-  private coreInstallUrl = "http://localhost:8000/v1/core/version";
+  private apiUrl = "http://localhost:8000/v1/core/version";
+  private coreInstallUrl: string;
+  private os: Os;
+  private arch: Arch;
 
   constructor(options: Options, logger: Logger) {
     this.options = options;
     this.logger = logger;
     this.homeDir = path.resolve(os.homedir(), ".hackerlog");
+    this.os = this.getOs();
+    this.arch = this.getArch();
+    this.coreInstallUrl = this.createCoreUrl();
+  }
+
+  private getOs(): Os {
+    switch (process.platform) {
+      case "darwin":
+        return Os.Darwin;
+      case "linux":
+        return Os.Linux;
+      case "win32":
+        return Os.Windows;
+      default:
+        return Os.NotSupported;
+    }
+  }
+
+  private getArch(): Arch {
+    switch (os.arch()) {
+      case "x32":
+        return Arch.I386;
+      case "x64":
+        return Arch.Amd64;
+      case "arm":
+      case "arm64":
+      case "ia32":
+      case "mips":
+      case "mipsel":
+      case "ppc":
+      case "ppc64":
+      case "s390":
+      case "s390x":
+        return Arch.NotSupported;
+      default:
+        return Arch.NotSupported;
+    }
+  }
+
+  private createCoreUrl(): string {
+    return `${this.apiUrl}?current_version=0&os=${this.os}&arch=${this.arch}`;
   }
 
   public checkAndInstall(callback: () => void): void {
     this.checkAndCreateHomeDir(() => {
-      this.checkAndInstallCore(callback);
+      this.installOrUpdateCore(callback);
     });
   }
 
-  public checkAndInstallCore(callback: () => void): void {
-    this.installOrUpdateCore(callback);
-  }
-
   public getCoreLocation(): string {
-    let dir =
-      this.dirname +
-      path.sep +
-      "hackerlog-master" +
-      path.sep +
-      "hackerlog" +
-      path.sep;
-
-    if (Dependencies.isWindows()) {
-      return `${dir}/core.exe`;
-    }
-
-    return `${dir}/core`;
+    return Dependencies.isWindows()
+      ? `${this.dirname}${path.sep}core.exe`
+      : `${this.dirname}${path.sep}core`;
   }
 
   public static isWindows(): boolean {
@@ -49,14 +92,19 @@ export default class Dependencies {
   }
 
   private isCoreInstalled(): boolean {
-    return fs.existsSync(this.getCoreLocation());
+    const installed = fs.existsSync(this.getCoreLocation());
+    this.logger.info("Core is installed: " + installed);
+    return installed;
   }
 
   private installOrUpdateCore(callback: () => void): void {
-    this.logger.debug("Downloading hackerlog-core...");
-    const zipFile = this.dirname + path.sep + "hackerlog-core.zip";
-    this.downloadFile(this.coreInstallUrl, zipFile, () => {
-      this.extractCore(zipFile, callback);
+    this.logger.info("Downloading hackerlog core...");
+    this.getLatestVersionUrl(url => {
+      this.logger.info("Downloading hackerlog core...");
+      const zipFile = this.dirname + path.sep + "core.zip";
+      this.downloadFile(url, zipFile, () => {
+        this.extractCore(zipFile, callback);
+      });
     });
   }
 
@@ -64,15 +112,15 @@ export default class Dependencies {
     this.logger.debug(`Extracting hackerlog-core into ${this.dirname}...`);
     this.removeCore(() => {
       this.unzip(zipFile, this.dirname, callback);
-      this.logger.debug("Finished extracting hackerlog-core.");
+      this.logger.debug("Finished extracting hackerlog core.");
     });
   }
 
   private async removeCore(callback: () => void): Promise<void> {
-    if (fs.existsSync(this.dirname + path.sep + "hackerlog-master")) {
+    if (fs.existsSync(this.dirname + path.sep + "core")) {
       try {
         const rimraf = await import("rimraf");
-        rimraf(this.dirname + path.sep + "hackerlog-master", () => {
+        rimraf(this.dirname + path.sep + "core", () => {
           if (callback !== null) {
             return callback();
           }
@@ -87,6 +135,28 @@ export default class Dependencies {
     }
   }
 
+  private async getLatestVersionUrl(callback: (string) => void): Promise<void> {
+    const request = await import("request");
+    this.options.getSetting(Settings.Proxy, proxy => {
+      let options = {
+        method: "GET",
+        uri: this.coreInstallUrl
+      };
+
+      if (proxy && proxy.trim()) {
+        options["proxy"] = proxy.trim();
+      }
+
+      request(options, (err, resp) => {
+        if (err) {
+          this.logger.error(err);
+        }
+        const body = JSON.parse(resp.body);
+        callback(body.download);
+      });
+    });
+  }
+
   private async downloadFile(
     url: string,
     outputFile: string,
@@ -94,13 +164,18 @@ export default class Dependencies {
   ): Promise<void> {
     const request = await import("request");
     this.options.getSetting(Settings.Proxy, proxy => {
-      let options = { url: url };
+      let options = {
+        method: "GET",
+        uri: url
+      };
 
       if (proxy && proxy.trim()) {
         options["proxy"] = proxy.trim();
       }
 
-      let r = request.get(options);
+      this.logger.info(JSON.stringify(options));
+
+      let r = request(options);
       let out = fs.createWriteStream(outputFile);
       r.pipe(out);
       return r.on("end", function() {
@@ -123,6 +198,9 @@ export default class Dependencies {
         const AdmZip = await import("adm-zip");
         let zip = new AdmZip(file);
         zip.extractAllTo(outputDir, true);
+        if (!Dependencies.isWindows()) {
+          fs.chmodSync(outputDir + "/core", "755");
+        }
       } catch (e) {
         return this.logger.error(e);
       } finally {
@@ -135,12 +213,18 @@ export default class Dependencies {
     }
   }
 
-  public checkAndCreateHomeDir(callback: () => void): void {
+  public checkAndCreateHomeDir(callback: (boolean) => void): void {
+    this.logger.info("Checking and creating home dir.");
     fs.stat(this.homeDir, err => {
       if (err && err.errno === 34) {
-        fs.mkdir(this.homeDir, callback);
+        fs.mkdir(this.homeDir, err2 => {
+          if (err2) {
+            this.logger.error(err2.message);
+            callback(this.isCoreInstalled());
+          }
+        });
       } else {
-        callback();
+        callback(this.isCoreInstalled());
       }
     });
   }

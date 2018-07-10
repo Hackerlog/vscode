@@ -38,7 +38,7 @@ export default class Options {
       "utf-8",
       (err: NodeJS.ErrnoException, content: string) => {
         if (err) {
-          this.logger.error("Could not load settings file" + err);
+          this.logger.error("Could not load settings file", err);
         } else {
           this.settings = JSON.parse(content);
         }
