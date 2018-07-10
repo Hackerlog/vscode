@@ -16,25 +16,38 @@ export default class Logger {
     [Levels.warn]: 2,
     [Levels.error]: 4
   };
+  private isDebugging = process.env.IS_DEBUG === "true";
 
   constructor(level: Levels, vscode) {
     this.setLevel(level);
-    Raven.config(
-      "https://0f033463374047f3ba843c0a8d84ee68:72e61a3d48a949b093dd4574bb6ca79b@sentry.io/1239966",
-      {
-        release: this.getVersion(vscode),
-        tags: {
-          os: process.platform,
-          arch: process.arch
+    this.initSentry(vscode);
+  }
+
+  private initSentry(vscode): void {
+    if (!this.isDebugging) {
+      Raven.config(
+        "https://0f033463374047f3ba843c0a8d84ee68:72e61a3d48a949b093dd4574bb6ca79b@sentry.io/1239966",
+        {
+          release: this.getVersion(vscode),
+          tags: {
+            os: process.platform,
+            arch: process.arch
+          }
         }
-      }
-    ).install();
+      ).install();
+    }
   }
 
   private getVersion(vscode): string {
     const packageJson = vscode.extensions.getExtension("hackerlog.hackerlog")
       .packageJSON;
     return get(packageJson, "version");
+  }
+
+  private sendToSentry(msg: string): void {
+    if (!this.isDebugging) {
+      Raven.captureMessage(msg);
+    }
   }
 
   public setLevel(level: Levels): void {
@@ -51,11 +64,9 @@ export default class Logger {
         console.info(msg);
       }
       if (level === Levels.warn) {
-        Raven.captureMessage(msg);
         console.warn(msg);
       }
       if (level === Levels.error) {
-        Raven.captureMessage(msg);
         console.error(msg);
       }
     }
@@ -70,12 +81,14 @@ export default class Logger {
   }
 
   public warn(msg: string): void {
+    this.sendToSentry(msg);
     this.log(Levels.warn, msg);
   }
 
   public error(msg: string, err: Error | null = null): void {
     this.log(Levels.error, msg);
-    if (err) {
+    this.sendToSentry(msg);
+    if (err && !this.isDebugging) {
       Raven.captureException(err);
     }
   }
