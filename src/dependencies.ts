@@ -1,21 +1,22 @@
-import * as path from "path";
-import * as fs from "fs";
-import * as os from "os";
+import * as path from 'path';
+import * as fs from 'fs';
+import * as os from 'os';
 
-import Options, { Settings } from "./options";
-import Logger from "./logger";
+import Options, { Settings } from './options';
+import Logger from './logger';
+import version from './version';
 
 enum Os {
-  Linux = "linux",
-  Darwin = "darwin",
-  Windows = "windows",
-  NotSupported = "not-supported"
+  Linux = 'linux',
+  Darwin = 'darwin',
+  Windows = 'windows',
+  NotSupported = 'not-supported',
 }
 
 enum Arch {
-  I386 = "386",
-  Amd64 = "amd64",
-  NotSupported = "not-supported"
+  I386 = '386',
+  Amd64 = 'amd64',
+  NotSupported = 'not-supported',
 }
 
 export default class Dependencies {
@@ -23,7 +24,7 @@ export default class Dependencies {
   private logger: Logger;
   private dirname = __dirname;
   private homeDir: string;
-  private apiUrl = "http://localhost:8000/v1/core/version";
+  private apiUrl = 'http://localhost:8000/v1/core/version';
   private coreInstallUrl: string;
   private os: Os;
   private arch: Arch;
@@ -31,20 +32,27 @@ export default class Dependencies {
   constructor(options: Options, logger: Logger) {
     this.options = options;
     this.logger = logger;
-    this.homeDir = path.resolve(os.homedir(), ".hackerlog");
+    this.homeDir = path.resolve(os.homedir(), '.hackerlog');
     this.os = this.getOs();
     this.arch = this.getArch();
-    this.coreInstallUrl = this.createCoreUrl();
+
+    this.createCoreUrl();
   }
 
   private getOs(): Os {
     switch (process.platform) {
-      case "darwin":
+      case 'darwin':
         return Os.Darwin;
-      case "linux":
+      case 'linux':
         return Os.Linux;
-      case "win32":
+      case 'win32':
         return Os.Windows;
+      // Maybe handle these some day
+      case 'aix':
+      case 'freebsd':
+      case 'openbsd':
+      case 'sunos':
+        return Os.NotSupported;
       default:
         return Os.NotSupported;
     }
@@ -52,27 +60,32 @@ export default class Dependencies {
 
   private getArch(): Arch {
     switch (os.arch()) {
-      case "x32":
+      case 'x32':
         return Arch.I386;
-      case "x64":
+      case 'x64':
         return Arch.Amd64;
-      case "arm":
-      case "arm64":
-      case "ia32":
-      case "mips":
-      case "mipsel":
-      case "ppc":
-      case "ppc64":
-      case "s390":
-      case "s390x":
+      // Maybe handle these some day
+      case 'arm':
+      case 'arm64':
+      case 'ia32':
+      case 'mips':
+      case 'mipsel':
+      case 'ppc':
+      case 'ppc64':
+      case 's390':
+      case 's390x':
         return Arch.NotSupported;
       default:
         return Arch.NotSupported;
     }
   }
 
-  private createCoreUrl(): string {
-    return `${this.apiUrl}?current_version=0&os=${this.os}&arch=${this.arch}`;
+  private createCoreUrl(): void {
+    version(this.getCoreLocation(), currentCoreVersion => {
+      this.coreInstallUrl = `${this.apiUrl}?current_version=${currentCoreVersion}&os=${
+        this.os
+      }&arch=${this.arch}`;
+    });
   }
 
   public checkAndInstall(callback: () => void): void {
@@ -88,20 +101,20 @@ export default class Dependencies {
   }
 
   public static isWindows(): boolean {
-    return os.type() === "Windows_NT";
+    return os.type() === 'Windows_NT';
   }
 
   private isCoreInstalled(): boolean {
     const installed = fs.existsSync(this.getCoreLocation());
-    this.logger.info("Core is installed: " + installed);
+    this.logger.info('Core is installed: ' + installed);
     return installed;
   }
 
   private installOrUpdateCore(callback: () => void): void {
-    this.logger.info("Downloading hackerlog core...");
+    this.logger.info('Downloading hackerlog core...');
     this.getLatestVersionUrl(url => {
-      this.logger.info("Downloading hackerlog core...");
-      const zipFile = this.dirname + path.sep + "core.zip";
+      this.logger.info('Downloading hackerlog core...');
+      const zipFile = this.dirname + path.sep + 'core.zip';
       this.downloadFile(url, zipFile, () => {
         this.extractCore(zipFile, callback);
       });
@@ -112,15 +125,15 @@ export default class Dependencies {
     this.logger.debug(`Extracting hackerlog-core into ${this.dirname}...`);
     this.removeCore(() => {
       this.unzip(zipFile, this.dirname, callback);
-      this.logger.debug("Finished extracting hackerlog core.");
+      this.logger.debug('Finished extracting hackerlog core.');
     });
   }
 
   private async removeCore(callback: () => void): Promise<void> {
-    if (fs.existsSync(this.dirname + path.sep + "core")) {
+    if (fs.existsSync(this.dirname + path.sep + 'core')) {
       try {
-        const rimraf = await import("rimraf");
-        rimraf(this.dirname + path.sep + "core", () => {
+        const rimraf = await import('rimraf');
+        rimraf(this.dirname + path.sep + 'core', () => {
           if (callback !== null) {
             return callback();
           }
@@ -136,15 +149,15 @@ export default class Dependencies {
   }
 
   private async getLatestVersionUrl(callback: (string) => void): Promise<void> {
-    const request = await import("request");
+    const request = await import('request');
     this.options.getSetting(Settings.Proxy, proxy => {
       let options = {
-        method: "GET",
-        uri: this.coreInstallUrl
+        method: 'GET',
+        uri: this.coreInstallUrl,
       };
 
       if (proxy && proxy.trim()) {
-        options["proxy"] = proxy.trim();
+        options['proxy'] = proxy.trim();
       }
 
       request(options, (err, resp) => {
@@ -157,20 +170,16 @@ export default class Dependencies {
     });
   }
 
-  private async downloadFile(
-    url: string,
-    outputFile: string,
-    callback: () => void
-  ): Promise<void> {
-    const request = await import("request");
+  private async downloadFile(url: string, outputFile: string, callback: () => void): Promise<void> {
+    const request = await import('request');
     this.options.getSetting(Settings.Proxy, proxy => {
       let options = {
-        method: "GET",
-        uri: url
+        method: 'GET',
+        uri: url,
       };
 
       if (proxy && proxy.trim()) {
-        options["proxy"] = proxy.trim();
+        options['proxy'] = proxy.trim();
       }
 
       this.logger.info(JSON.stringify(options));
@@ -178,8 +187,8 @@ export default class Dependencies {
       let r = request(options);
       let out = fs.createWriteStream(outputFile);
       r.pipe(out);
-      return r.on("end", function() {
-        return out.on("finish", function() {
+      return r.on('end', function() {
+        return out.on('finish', function() {
           if (callback !== null) {
             return callback();
           }
@@ -188,18 +197,14 @@ export default class Dependencies {
     });
   }
 
-  private async unzip(
-    file: string,
-    outputDir: string,
-    callback: () => void = null
-  ): Promise<void> {
+  private async unzip(file: string, outputDir: string, callback: () => void = null): Promise<void> {
     if (fs.existsSync(file)) {
       try {
-        const AdmZip = await import("adm-zip");
+        const AdmZip = await import('adm-zip');
         let zip = new AdmZip(file);
         zip.extractAllTo(outputDir, true);
         if (!Dependencies.isWindows()) {
-          fs.chmodSync(outputDir + "/core", "755");
+          fs.chmodSync(outputDir + '/core', '755');
         }
       } catch (e) {
         return this.logger.error(e);
@@ -214,7 +219,7 @@ export default class Dependencies {
   }
 
   public checkAndCreateHomeDir(callback: (boolean) => void): void {
-    this.logger.info("Checking and creating home dir.");
+    this.logger.info('Checking and creating home dir.');
     fs.stat(this.homeDir, err => {
       if (err && err.errno === 34) {
         fs.mkdir(this.homeDir, err2 => {

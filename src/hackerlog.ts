@@ -1,12 +1,11 @@
-import * as os from "os";
-import * as child_process from "child_process";
-import * as vscode from "vscode";
-import * as path from "path";
+import * as os from 'os';
+import * as child_process from 'child_process';
+import * as vscode from 'vscode';
+import * as path from 'path';
 
-import Dependencies from "./dependencies";
-import Options, { Settings } from "./options";
-import Pulse from "./pulse";
-import { PassThrough } from "stream";
+import Dependencies from './dependencies';
+import Options, { Settings } from './options';
+import Pulse from './pulse';
 
 export default class Hackerlog {
   private vscode;
@@ -18,33 +17,31 @@ export default class Hackerlog {
   private lastPulse: number = 0;
   private dependencies: Dependencies;
   private options: Options;
-  private pulseEndpoint = "http://localhost:8000/v1/units";
+  private pulseEndpoint = 'http://localhost:8000/v1/units';
 
   constructor({ vscode, logger, options }) {
     this.vscode = vscode;
     this.logger = logger;
     this.options = options;
-    this.extension = vscode.extensions.getExtension(
-      "hackerlog.hackerlog"
-    ).packageJSON;
+    this.extension = vscode.extensions.getExtension('hackerlog.hackerlog').packageJSON;
     this.statusBar = vscode.StatusBarItem = vscode.window.createStatusBarItem(
       vscode.StatusBarAlignment.Left
     );
   }
 
   public initialize(): void {
-    this.logger.debug("Initializing Hackerlog v" + this.extension.version);
-    this.statusBar.text = "$(clock) Hackerlog Initializing...";
+    this.logger.debug('Initializing Hackerlog v' + this.extension.version);
+    this.statusBar.text = '$(clock) Hackerlog Initializing...';
     this.statusBar.show();
 
     this.checkApiKey();
 
     this.dependencies = new Dependencies(this.options, this.logger);
     this.dependencies.checkAndInstall(() => {
-      this.statusBar.text = "$(clock)";
-      this.statusBar.tooltip = "Hackerlog: Initialized";
+      this.statusBar.text = '$(clock)';
+      this.statusBar.tooltip = 'Hackerlog: Initialized';
       this.options.getSetting(Settings.StatusBarIcon, val => {
-        if (val && val.trim() === "false") {
+        if (val && val.trim() === 'false') {
           this.statusBar.hide();
         } else {
           this.statusBar.show();
@@ -58,14 +55,14 @@ export default class Hackerlog {
   public promptForEditorToken(): void {
     this.options.getSetting(Settings.EditorKey, defaultVal => {
       if (this.validateKey(defaultVal) !== null) {
-        defaultVal = "";
+        defaultVal = '';
       }
       let promptOptions = {
-        prompt: "Hackerlog Editor Key",
-        placeHolder: "Enter your editor key from hackerlog.io/me",
+        prompt: 'Hackerlog Editor Key',
+        placeHolder: 'Enter your editor key from hackerlog.io/me',
         value: defaultVal,
         ignoreFocusOut: true,
-        validateInput: this.validateKey.bind(this)
+        validateInput: this.validateKey.bind(this),
       };
       this.vscode.window.showInputBox(promptOptions).then(val => {
         if (this.validateKey(val) === null) {
@@ -78,17 +75,17 @@ export default class Hackerlog {
   public promptForProxy(): void {
     this.options.getSetting(Settings.Proxy, defaultVal => {
       if (!defaultVal) {
-        defaultVal = "";
+        defaultVal = '';
       }
       let promptOptions = {
-        prompt: "Hackerlog Proxy",
-        placeHolder: "Proxy format is https://user:pass@host:port",
+        prompt: 'Hackerlog Proxy',
+        placeHolder: 'Proxy format is https://user:pass@host:port',
         value: defaultVal,
         ignoreFocusOut: true,
-        validateInput: this.validateProxy.bind(this)
+        validateInput: this.validateProxy.bind(this),
       };
       this.vscode.window.showInputBox(promptOptions).then(val => {
-        if (val || val === "") {
+        if (val || val === '') {
           this.options.setSetting(Settings.Proxy, val);
         }
       });
@@ -97,25 +94,25 @@ export default class Hackerlog {
 
   public promptForDebug(): void {
     this.options.getSetting(Settings.Debug, defaultVal => {
-      if (!defaultVal || defaultVal.trim() !== "true") {
-        defaultVal = "false";
+      if (!defaultVal || defaultVal.trim() !== 'true') {
+        defaultVal = 'false';
       }
-      let items: string[] = ["true", "false"];
+      let items: string[] = ['true', 'false'];
       let promptOptions = {
-        placeHolder: "true or false (Currently " + defaultVal + ")",
+        placeHolder: 'true or false (Currently ' + defaultVal + ')',
         value: defaultVal,
-        ignoreFocusOut: true
+        ignoreFocusOut: true,
       };
       this.vscode.window.showQuickPick(items, promptOptions).then(newVal => {
         if (newVal === null) {
           return;
         }
         this.options.setSetting(Settings.Debug, newVal);
-        if (newVal === "true") {
-          this.logger.setLevel("debug");
-          this.logger.debug("Debug enabled");
+        if (newVal === 'true') {
+          this.logger.setLevel('debug');
+          this.logger.debug('Debug enabled');
         } else {
-          this.logger.setLevel("info");
+          this.logger.setLevel('info');
         }
       });
     });
@@ -123,46 +120,46 @@ export default class Hackerlog {
 
   public promptStatusBarIcon(): void {
     this.options.getSetting(Settings.StatusBarIcon, defaultVal => {
-      if (!defaultVal || defaultVal.trim() !== "false") {
-        defaultVal = "true";
+      if (!defaultVal || defaultVal.trim() !== 'false') {
+        defaultVal = 'true';
       }
-      let items: string[] = ["true", "false"];
+      let items: string[] = ['true', 'false'];
       let promptOptions = {
-        placeHolder: "true or false (Currently " + defaultVal + ")",
+        placeHolder: 'true or false (Currently ' + defaultVal + ')',
         value: defaultVal,
-        ignoreFocusOut: true
+        ignoreFocusOut: true,
       };
       this.vscode.window.showQuickPick(items, promptOptions).then(newVal => {
         if (newVal === null) {
           return;
         }
         this.options.setSetting(Settings.StatusBarIcon, newVal);
-        if (newVal === "true") {
+        if (newVal === 'true') {
           this.statusBar.show();
-          this.logger.debug("Status bar icon enabled");
+          this.logger.debug('Status bar icon enabled');
         } else {
           this.statusBar.hide();
-          this.logger.debug("Status bar icon disabled");
+          this.logger.debug('Status bar icon disabled');
         }
       });
     });
   }
 
   public openDashboardWebsite(): void {
-    let open = "xdg-open";
-    let args = ["https://hackerlog.io/me"];
+    let open = 'xdg-open';
+    let args = ['https://hackerlog.io/me'];
     if (Dependencies.isWindows()) {
-      open = "cmd";
-      args.unshift("/c", "start", '""');
-    } else if (os.type() === "Darwin") {
-      open = "open";
+      open = 'cmd';
+      args.unshift('/c', 'start', '""');
+    } else if (os.type() === 'Darwin') {
+      open = 'open';
     }
     child_process.execFile(open, args, (error, stdout, stderr) => {
       if (error !== null) {
-        if (stderr && stderr.toString() !== "") {
+        if (stderr && stderr.toString() !== '') {
           this.logger.error(stderr.toString());
         }
-        if (stdout && stdout.toString() !== "") {
+        if (stdout && stdout.toString() !== '') {
           this.logger.error(stdout.toString());
         }
         this.logger.error(error.toString());
@@ -176,15 +173,11 @@ export default class Hackerlog {
   }
 
   private validateKey(key: string): string {
-    const err =
-      "Invalid editor key... check https://hackerlog.io/me for your key.";
+    const err = 'Invalid editor key... check https://hackerlog.io/me for your key.';
     if (!key) {
       return err;
     }
-    const re = new RegExp(
-      "^[0-9A-F]{8}-[0-9A-F]{4}-4[0-9A-F]{3}-[89AB][0-9A-F]{3}-[0-9A-F]{12}$",
-      "i"
-    );
+    const re = new RegExp('^[0-9A-F]{8}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{12}$', 'i');
     if (!re.test(key)) {
       return err;
     }
@@ -193,16 +186,13 @@ export default class Hackerlog {
 
   private validateProxy(proxy: string): string {
     const err =
-      "Invalid proxy. Valid formats are https://user:pass@host:port or socks5://user:pass@host:port or domain\\user:pass.";
+      'Invalid proxy. Valid formats are https://user:pass@host:port or socks5://user:pass@host:port or domain\\user:pass.';
     if (!proxy) {
       return err;
     }
-    let re = new RegExp(
-      "^((https?|socks5)://)?([^:@]+(:([^:@])+)?@)?[\\w\\.-]+(:\\d+)?$",
-      "i"
-    );
-    if (proxy.indexOf("\\") > -1) {
-      re = new RegExp("^.*\\\\.+$", "i");
+    let re = new RegExp('^((https?|socks5)://)?([^:@]+(:([^:@])+)?@)?[\\w\\.-]+(:\\d+)?$', 'i');
+    if (proxy.indexOf('\\') > -1) {
+      re = new RegExp('^.*\\\\.+$', 'i');
     }
     if (!re.test(proxy)) {
       return err;
@@ -227,21 +217,9 @@ export default class Hackerlog {
   private setupEventListeners(): void {
     // subscribe to selection change and editor activation events
     let subscriptions: vscode.Disposable[] = [];
-    this.vscode.window.onDidChangeTextEditorSelection(
-      this.onChange,
-      this,
-      subscriptions
-    );
-    this.vscode.window.onDidChangeActiveTextEditor(
-      this.onChange,
-      this,
-      subscriptions
-    );
-    this.vscode.workspace.onDidSaveTextDocument(
-      this.onSave,
-      this,
-      subscriptions
-    );
+    this.vscode.window.onDidChangeTextEditorSelection(this.onChange, this, subscriptions);
+    this.vscode.window.onDidChangeActiveTextEditor(this.onChange, this, subscriptions);
+    this.vscode.workspace.onDidSaveTextDocument(this.onSave, this, subscriptions);
 
     // create a combined disposable from both event subscriptions
     this.disposable = this.vscode.Disposable.from(...subscriptions);
@@ -263,11 +241,7 @@ export default class Hackerlog {
         let file: string = doc.fileName;
         if (file) {
           let time: number = Date.now();
-          if (
-            isWrite ||
-            this.enoughTimePassed(time) ||
-            this.lastFile !== file
-          ) {
+          if (isWrite || this.enoughTimePassed(time) || this.lastFile !== file) {
             this.sendPulse(file, isWrite);
             this.lastFile = file;
             this.lastPulse = time;
@@ -289,58 +263,57 @@ export default class Hackerlog {
             const flags = {
               apiUrl: this.pulseEndpoint,
               editorToken,
-              editorType: "vscode",
+              editorType: 'vscode',
               projectName: this.getProjectName(file),
               fileName,
               startedAt: new Date(this.lastPulse).toISOString(),
-              stoppedAt: new Date().toISOString()
+              stoppedAt: new Date().toISOString(),
             };
 
             const pulse = new Pulse({
               flags,
               coreLocation,
-              logger: this.logger
+              logger: this.logger,
             });
 
             pulse.run(process => {
-              process.on("close", (code, signal) => {
+              process.on('close', (code, signal) => {
                 if (code === 0) {
-                  this.statusBar.text = "$(clock)";
+                  this.statusBar.text = '$(clock)';
                   let today = new Date();
                   this.statusBar.tooltip =
-                    "Hackerlog: Last heartbeat sent " + this.formatDate(today);
+                    'Hackerlog: Last heartbeat sent ' + this.formatDate(today);
                 } else if (code === 102) {
-                  this.statusBar.text = "$(clock)";
+                  this.statusBar.text = '$(clock)';
                   this.statusBar.tooltip =
-                    "Hackerlog: Working offline... coding activity will sync next time we are online.";
+                    'Hackerlog: Working offline... coding activity will sync next time we are online.';
                   this.logger.warn(
-                    "API Error (102); Check your " +
+                    'API Error (102); Check your ' +
                       this.options.getLogFile() +
-                      " file for more details."
+                      ' file for more details.'
                   );
                 } else if (code === 103) {
-                  this.statusBar.text = "$(clock) Hackerlog Error";
+                  this.statusBar.text = '$(clock) Hackerlog Error';
                   let error_msg =
-                    "Config Parsing Error (103); Check your " +
+                    'Config Parsing Error (103); Check your ' +
                     this.options.getLogFile() +
-                    " file for more details.";
-                  this.statusBar.tooltip = "Hackerlog: " + error_msg;
+                    ' file for more details.';
+                  this.statusBar.tooltip = 'Hackerlog: ' + error_msg;
                   this.logger.error(error_msg);
                 } else if (code === 104) {
-                  this.statusBar.text = "$(clock) Hackerlog Error";
-                  let error_msg =
-                    "Invalid API Key (104); Make sure your API Key is correct!";
-                  this.statusBar.tooltip = "Hackerlog: " + error_msg;
+                  this.statusBar.text = '$(clock) Hackerlog Error';
+                  let error_msg = 'Invalid API Key (104); Make sure your API Key is correct!';
+                  this.statusBar.tooltip = 'Hackerlog: ' + error_msg;
                   this.logger.error(error_msg);
                 } else {
-                  this.statusBar.text = "$(clock) Hackerlog Error";
+                  this.statusBar.text = '$(clock) Hackerlog Error';
                   let error_msg =
-                    "Unknown Error (" +
+                    'Unknown Error (' +
                     code +
-                    "); Check your " +
+                    '); Check your ' +
                     this.options.getLogFile() +
-                    " file for more details.";
-                  this.statusBar.tooltip = "Hackerlog: " + error_msg;
+                    ' file for more details.';
+                  this.statusBar.tooltip = 'Hackerlog: ' + error_msg;
                   this.logger.error(error_msg);
                 }
               });
@@ -355,23 +328,23 @@ export default class Hackerlog {
 
   private formatDate(date: Date): String {
     let months = [
-      "Jan",
-      "Feb",
-      "Mar",
-      "Apr",
-      "May",
-      "Jun",
-      "Jul",
-      "Aug",
-      "Sep",
-      "Oct",
-      "Nov",
-      "Dec"
+      'Jan',
+      'Feb',
+      'Mar',
+      'Apr',
+      'May',
+      'Jun',
+      'Jul',
+      'Aug',
+      'Sep',
+      'Oct',
+      'Nov',
+      'Dec',
     ];
-    let ampm = "AM";
+    let ampm = 'AM';
     let hour = date.getHours();
     if (hour > 11) {
-      ampm = "PM";
+      ampm = 'PM';
       hour = hour - 12;
     }
     if (hour === 0) {
@@ -380,15 +353,15 @@ export default class Hackerlog {
     let minute = date.getMinutes();
     return (
       months[date.getMonth()] +
-      " " +
+      ' ' +
       date.getDate() +
-      ", " +
+      ', ' +
       date.getFullYear() +
-      " " +
+      ' ' +
       hour +
-      ":" +
-      (minute < 10 ? "0" + minute : minute) +
-      " " +
+      ':' +
+      (minute < 10 ? '0' + minute : minute) +
+      ' ' +
       ampm
     );
   }
@@ -400,7 +373,7 @@ export default class Hackerlog {
   private getProjectName(file: string): string {
     const uri = this.vscode.Uri.file(file);
     const workspaceFolder = this.vscode.workspace.getWorkspaceFolder(uri);
-    const defaultName = "unknown-project";
+    const defaultName = 'unknown-project';
     if (this.vscode.workspace && workspaceFolder) {
       try {
         if (!workspaceFolder.name) {
@@ -416,12 +389,11 @@ export default class Hackerlog {
 
   // TODO: Maybe use this?
   private obfuscateKey(key: string): string {
-    let newKey = "";
+    let newKey = '';
     if (key) {
       newKey = key;
       if (key.length > 4) {
-        newKey =
-          "XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXX" + key.substring(key.length - 4);
+        newKey = 'XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXX' + key.substring(key.length - 4);
       }
     }
     return newKey;

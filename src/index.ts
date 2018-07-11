@@ -1,10 +1,10 @@
 // The module 'vscode' contains the VS Code extensibility API
 // Import the module and reference it with the alias vscode in your code below
-import * as vscode from "vscode";
+import * as vscode from 'vscode';
 
-import Hackerlog from "./hackerlog";
-import Logger, { Levels } from "./logger";
-import Options, { Settings } from "./options";
+import Hackerlog from './hackerlog';
+import Logger, { Levels } from './logger';
+import Options, { Settings } from './options';
 
 let logger: Logger;
 let options: Options;
@@ -18,35 +18,35 @@ export function activate(ctx: vscode.ExtensionContext) {
   const hackerlog = new Hackerlog({
     vscode,
     logger,
-    options
+    options,
   });
 
   ctx.subscriptions.push(
-    vscode.commands.registerCommand("hackerlog.editorKey", () => {
+    vscode.commands.registerCommand('hackerlog.editorKey', () => {
       hackerlog.promptForEditorToken();
     })
   );
 
   ctx.subscriptions.push(
-    vscode.commands.registerCommand("hackerlog.proxy", () => {
+    vscode.commands.registerCommand('hackerlog.proxy', () => {
       hackerlog.promptForProxy();
     })
   );
 
   ctx.subscriptions.push(
-    vscode.commands.registerCommand("hackerlog.debug", () => {
+    vscode.commands.registerCommand('hackerlog.debug', () => {
       hackerlog.promptForDebug();
     })
   );
 
   ctx.subscriptions.push(
-    vscode.commands.registerCommand("hackerlog.statusBarIcon", () => {
+    vscode.commands.registerCommand('hackerlog.statusBarIcon', () => {
       hackerlog.promptStatusBarIcon();
     })
   );
 
   ctx.subscriptions.push(
-    vscode.commands.registerCommand("hackerlog.dashboard", () => {
+    vscode.commands.registerCommand('hackerlog.dashboard', () => {
       hackerlog.openDashboardWebsite();
     })
   );
@@ -55,7 +55,7 @@ export function activate(ctx: vscode.ExtensionContext) {
   ctx.subscriptions.push(hackerlog);
 
   options.getSetting(Settings.Debug, debug => {
-    if (debug || process.env.IS_DEBUG === "true") {
+    if (debug || process.env.IS_DEBUG === 'true') {
       logger.setLevel(Levels.debug);
     }
     hackerlog.initialize();

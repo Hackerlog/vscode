@@ -1,11 +1,11 @@
-import * as Raven from "raven";
-import * as get from "lodash/get";
+import * as Raven from 'raven';
+import * as get from 'lodash/get';
 
 export enum Levels {
-  debug = "debug",
-  info = "info",
-  warn = "warn",
-  error = "error"
+  debug = 'debug',
+  info = 'info',
+  warn = 'warn',
+  error = 'error',
 }
 
 export default class Logger {
@@ -14,9 +14,9 @@ export default class Logger {
     [Levels.debug]: 0,
     [Levels.info]: 1,
     [Levels.warn]: 2,
-    [Levels.error]: 4
+    [Levels.error]: 4,
   };
-  private isDebugging = process.env.IS_DEBUG === "true";
+  private isDebugging = process.env.IS_DEBUG === 'true';
 
   constructor(level: Levels, vscode) {
     this.setLevel(level);
@@ -26,22 +26,21 @@ export default class Logger {
   private initSentry(vscode): void {
     if (!this.isDebugging) {
       Raven.config(
-        "https://0f033463374047f3ba843c0a8d84ee68:72e61a3d48a949b093dd4574bb6ca79b@sentry.io/1239966",
+        'https://0f033463374047f3ba843c0a8d84ee68:72e61a3d48a949b093dd4574bb6ca79b@sentry.io/1239966',
         {
           release: this.getVersion(vscode),
           tags: {
             os: process.platform,
-            arch: process.arch
-          }
+            arch: process.arch,
+          },
         }
       ).install();
     }
   }
 
   private getVersion(vscode): string {
-    const packageJson = vscode.extensions.getExtension("hackerlog.hackerlog")
-      .packageJSON;
-    return get(packageJson, "version");
+    const packageJson = vscode.extensions.getExtension('hackerlog.hackerlog').packageJSON;
+    return get(packageJson, 'version');
   }
 
   private sendToSentry(msg: string): void {
@@ -56,7 +55,7 @@ export default class Logger {
 
   public log(level: string, msg: string): void {
     if (this.levelAmount[level] >= this.levelAmount[this.level]) {
-      msg = "[Hackerlog] [" + level.toUpperCase() + "] " + msg;
+      msg = '[Hackerlog] [' + level.toUpperCase() + '] ' + msg;
       if (level === Levels.debug) {
         console.log(msg);
       }

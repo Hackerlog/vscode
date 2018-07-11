@@ -1,5 +1,5 @@
-import * as child_process from "child_process";
-import Logger from "./logger";
+import * as child_process from 'child_process';
+import Logger from './logger';
 
 interface FlagValues {
   apiUrl: string;
@@ -16,15 +16,15 @@ export default class Pulse {
   private coreLocation: string;
   private logger: Logger;
   private flags = {
-    apiUrl: "--api-url",
-    editorToken: "--editor-token",
-    editorType: "--editor-type",
-    projectName: "--project-name",
-    fileName: "--file-name",
-    locWritten: "--loc-written",
-    locDeleted: "--loc-deleted",
-    startedAt: "--started-at",
-    stoppedAt: "--stopped-at"
+    apiUrl: '--api-url',
+    editorToken: '--editor-token',
+    editorType: '--editor-type',
+    projectName: '--project-name',
+    fileName: '--file-name',
+    locWritten: '--loc-written',
+    locDeleted: '--loc-deleted',
+    startedAt: '--started-at',
+    stoppedAt: '--stopped-at',
   };
 
   public constructor({ flags, coreLocation, logger }) {
@@ -35,6 +35,7 @@ export default class Pulse {
 
   private convertFlagsToCommand(): Array<string> {
     return [
+      'send',
       this.flags.apiUrl,
       this.flagValues.apiUrl,
       this.flags.editorToken,
@@ -48,23 +49,21 @@ export default class Pulse {
       this.flags.startedAt,
       this.flagValues.startedAt,
       this.flags.stoppedAt,
-      this.flagValues.stoppedAt
+      this.flagValues.stoppedAt,
     ];
   }
 
   public run(callback: (process: child_process.ChildProcess) => void): void {
-    this.logger.debug(
-      "Sending pulse: " + this.convertFlagsToCommand().join(" ")
-    );
+    this.logger.debug('Sending pulse: ' + this.convertFlagsToCommand().join(' '));
     let process = child_process.execFile(
       this.coreLocation,
       this.convertFlagsToCommand(),
       (error, stdout, stderr) => {
         if (error !== null) {
-          if (stderr && stderr.toString() !== "") {
+          if (stderr && stderr.toString() !== '') {
             this.logger.error(stderr.toString());
           }
-          if (stdout && stdout.toString() !== "") {
+          if (stdout && stdout.toString() !== '') {
             this.logger.error(stdout.toString());
           }
           this.logger.error(error.toString());
