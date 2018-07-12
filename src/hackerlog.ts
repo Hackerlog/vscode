@@ -1,15 +1,16 @@
-import * as os from 'os';
 import * as child_process from 'child_process';
-import * as vscode from 'vscode';
+import * as os from 'os';
 import * as path from 'path';
+import * as vscode from 'vscode';
 
 import Dependencies from './dependencies';
+import Logger, { Levels } from './logger';
 import Options, { Settings } from './options';
 import Pulse from './pulse';
 
 export default class Hackerlog {
   private vscode;
-  private logger;
+  private logger: Logger;
   private extension;
   private statusBar;
   private disposable: vscode.Disposable;
@@ -37,10 +38,10 @@ export default class Hackerlog {
     this.checkApiKey();
 
     this.dependencies = new Dependencies(this.options, this.logger);
-    this.dependencies.checkAndInstall(() => {
+    this.dependencies.checkAndInstall(async () => {
       this.statusBar.text = '$(clock)';
       this.statusBar.tooltip = 'Hackerlog: Initialized';
-      this.options.getSetting(Settings.StatusBarIcon, val => {
+      await this.options.getSetting(Settings.StatusBarIcon, val => {
         if (val && val.trim() === 'false') {
           this.statusBar.hide();
         } else {
@@ -52,12 +53,12 @@ export default class Hackerlog {
     this.setupEventListeners();
   }
 
-  public promptForEditorToken(): void {
-    this.options.getSetting(Settings.EditorKey, defaultVal => {
+  public async promptForEditorToken(): Promise<void> {
+    await this.options.getSetting(Settings.EditorKey, defaultVal => {
       if (this.validateKey(defaultVal) !== null) {
         defaultVal = '';
       }
-      let promptOptions = {
+      const promptOptions = {
         prompt: 'Hackerlog Editor Key',
         placeHolder: 'Enter your editor key from hackerlog.io/me',
         value: defaultVal,
@@ -72,12 +73,12 @@ export default class Hackerlog {
     });
   }
 
-  public promptForProxy(): void {
-    this.options.getSetting(Settings.Proxy, defaultVal => {
+  public async promptForProxy(): Promise<void> {
+    await this.options.getSetting(Settings.Proxy, defaultVal => {
       if (!defaultVal) {
         defaultVal = '';
       }
-      let promptOptions = {
+      const promptOptions = {
         prompt: 'Hackerlog Proxy',
         placeHolder: 'Proxy format is https://user:pass@host:port',
         value: defaultVal,
@@ -97,8 +98,8 @@ export default class Hackerlog {
       if (!defaultVal || defaultVal.trim() !== 'true') {
         defaultVal = 'false';
       }
-      let items: string[] = ['true', 'false'];
-      let promptOptions = {
+      const items: string[] = ['true', 'false'];
+      const promptOptions = {
         placeHolder: 'true or false (Currently ' + defaultVal + ')',
         value: defaultVal,
         ignoreFocusOut: true,
@@ -109,10 +110,10 @@ export default class Hackerlog {
         }
         this.options.setSetting(Settings.Debug, newVal);
         if (newVal === 'true') {
-          this.logger.setLevel('debug');
+          this.logger.setLevel(Levels.debug);
           this.logger.debug('Debug enabled');
         } else {
-          this.logger.setLevel('info');
+          this.logger.setLevel(Levels.info);
         }
       });
     });
@@ -123,8 +124,8 @@ export default class Hackerlog {
       if (!defaultVal || defaultVal.trim() !== 'false') {
         defaultVal = 'true';
       }
-      let items: string[] = ['true', 'false'];
-      let promptOptions = {
+      const items: string[] = ['true', 'false'];
+      const promptOptions = {
         placeHolder: 'true or false (Currently ' + defaultVal + ')',
         value: defaultVal,
         ignoreFocusOut: true,
@@ -147,7 +148,7 @@ export default class Hackerlog {
 
   public openDashboardWebsite(): void {
     let open = 'xdg-open';
-    let args = ['https://hackerlog.io/me'];
+    const args = ['https://hackerlog.io/me'];
     if (Dependencies.isWindows()) {
       open = 'cmd';
       args.unshift('/c', 'start', '""');
@@ -216,7 +217,7 @@ export default class Hackerlog {
 
   private setupEventListeners(): void {
     // subscribe to selection change and editor activation events
-    let subscriptions: vscode.Disposable[] = [];
+    const subscriptions: vscode.Disposable[] = [];
     this.vscode.window.onDidChangeTextEditorSelection(this.onChange, this, subscriptions);
     this.vscode.window.onDidChangeActiveTextEditor(this.onChange, this, subscriptions);
     this.vscode.workspace.onDidSaveTextDocument(this.onSave, this, subscriptions);
@@ -234,13 +235,13 @@ export default class Hackerlog {
   }
 
   private onEvent(isWrite: boolean): void {
-    let editor = this.vscode.window.activeTextEditor;
+    const editor = this.vscode.window.activeTextEditor;
     if (editor) {
-      let doc = editor.document;
+      const doc = editor.document;
       if (doc) {
-        let file: string = doc.fileName;
+        const file: string = doc.fileName;
         if (file) {
-          let time: number = Date.now();
+          const time: number = Date.now();
           if (isWrite || this.enoughTimePassed(time) || this.lastFile !== file) {
             this.sendPulse(file, isWrite);
             this.lastFile = file;
@@ -252,6 +253,7 @@ export default class Hackerlog {
   }
 
   private sendPulse(file: string, isWrite): void {
+    this.logger.info(isWrite);
     this.hasEditorToken((hasEditorToken, editorToken) => {
       if (hasEditorToken) {
         this.dependencies.checkAndCreateHomeDir(coreIsInstalled => {
@@ -264,8 +266,8 @@ export default class Hackerlog {
               apiUrl: this.pulseEndpoint,
               editorToken,
               editorType: 'vscode',
-              projectName: this.getProjectName(file),
               fileName,
+              projectName: this.getProjectName(file),
               startedAt: new Date(this.lastPulse).toISOString(),
               stoppedAt: new Date().toISOString(),
             };
@@ -277,10 +279,10 @@ export default class Hackerlog {
             });
 
             pulse.run(process => {
-              process.on('close', (code, signal) => {
+              process.on('close', (code, _) => {
                 if (code === 0) {
                   this.statusBar.text = '$(clock)';
-                  let today = new Date();
+                  const today = new Date();
                   this.statusBar.tooltip =
                     'Hackerlog: Last heartbeat sent ' + this.formatDate(today);
                 } else if (code === 102) {
@@ -294,7 +296,7 @@ export default class Hackerlog {
                   );
                 } else if (code === 103) {
                   this.statusBar.text = '$(clock) Hackerlog Error';
-                  let error_msg =
+                  const error_msg =
                     'Config Parsing Error (103); Check your ' +
                     this.options.getLogFile() +
                     ' file for more details.';
@@ -302,12 +304,12 @@ export default class Hackerlog {
                   this.logger.error(error_msg);
                 } else if (code === 104) {
                   this.statusBar.text = '$(clock) Hackerlog Error';
-                  let error_msg = 'Invalid API Key (104); Make sure your API Key is correct!';
+                  const error_msg = 'Invalid API Key (104); Make sure your API Key is correct!';
                   this.statusBar.tooltip = 'Hackerlog: ' + error_msg;
                   this.logger.error(error_msg);
                 } else {
                   this.statusBar.text = '$(clock) Hackerlog Error';
-                  let error_msg =
+                  const error_msg =
                     'Unknown Error (' +
                     code +
                     '); Check your ' +
@@ -327,7 +329,7 @@ export default class Hackerlog {
   }
 
   private formatDate(date: Date): String {
-    let months = [
+    const months = [
       'Jan',
       'Feb',
       'Mar',
@@ -350,7 +352,7 @@ export default class Hackerlog {
     if (hour === 0) {
       hour = 12;
     }
-    let minute = date.getMinutes();
+    const minute = date.getMinutes();
     return (
       months[date.getMonth()] +
       ' ' +

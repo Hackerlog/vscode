@@ -1,5 +1,5 @@
+import { get } from 'lodash';
 import * as Raven from 'raven';
-import * as get from 'lodash/get';
 
 export enum Levels {
   debug = 'debug',

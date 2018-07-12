@@ -24,11 +24,12 @@
         "watch": "tsc -watch -p ./",
         "postinstall": "node ./node_modules/vscode/bin/install",
         "test": "yarn build && node ./node_modules/vscode/bin/test",
-        "lint": "tslint -p tslint.json",
-        "lint:fix": "tslint -p tslint.json --fix"
+        "lint": "tslint -p tsconfig.json",
+        "lint:fix": "tslint -p tsconfig.json --fix"
     },
     "devDependencies": {
         "@types/jest": "^23.1.4",
+        "@types/lodash": "^4.14.111",
         "@types/node": "^7.0.43",
         "jest": "^23.3.0",
         "tslint": "^5.8.0",
@@ -38,6 +39,7 @@
     },
     "dependencies": {
         "adm-zip": "^0.4.11",
+        "fs-extra": "^6.0.1",
         "lodash": "^4.17.10",
         "raven": "^2.6.3",
         "request": "^2.87.0",

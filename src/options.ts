@@ -1,8 +1,7 @@
-import * as path from 'path';
 import * as fs from 'fs';
-import * as get from 'lodash/get';
-import * as noop from 'lodash/noop';
-import * as assign from 'lodash/assign';
+import { readJson } from 'fs-extra';
+import { noop, get, assign } from 'lodash';
+import * as path from 'path';
 
 import Dependencies from './dependencies';
 import Logger from './logger';
@@ -29,34 +28,17 @@ export default class Options {
 
   public constructor(logger: Logger) {
     this.logger = logger;
-    this.loadConfig();
   }
 
-  private loadConfig(): void {
-    fs.readFile(this.getConfigFile(), 'utf-8', (err: NodeJS.ErrnoException, content: string) => {
-      if (err) {
-        this.logger.error('Could not load settings file', err);
-      } else {
-        this.settings = JSON.parse(content);
-      }
-    });
+  public async getSetting(key: Settings, callback: (string?, any?) => void = noop): Promise<void> {
+    const content = await readJson(this.getConfigFile());
+    callback(get(content, key));
   }
 
-  private getHome(): string {
-    let home = process.env.HACKERLOG_HOME;
-    if (home) {
-      return home;
-    } else {
-      return this.getUserHomeDir();
-    }
-  }
-
-  public getSetting(key: Settings, callback: (string?, any?) => void = noop): void {
-    callback(get(this.settings, key));
-  }
-
+  // TODO: Update this with the fs-extra method
   public setSetting(key: Settings, val: string, callback: (Error) => void = noop): void {
     const content = assign({}, this.settings, { [key]: val });
+
     fs.writeFile(this.getConfigFile(), JSON.stringify(content, null, 4), function(err) {
       if (err) {
         callback(new Error('could not write to ' + this.getConfigFile()));
@@ -76,5 +58,14 @@ export default class Options {
 
   public getUserHomeDir(): string {
     return process.env[Dependencies.isWindows() ? 'USERPROFILE' : 'HOME'] || '';
+  }
+
+  private getHome(): string {
+    const home = process.env.HACKERLOG_HOME;
+    if (home) {
+      return home;
+    } else {
+      return this.getUserHomeDir();
+    }
   }
 }

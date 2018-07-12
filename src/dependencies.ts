@@ -1,10 +1,22 @@
-import * as path from 'path';
 import * as fs from 'fs';
 import * as os from 'os';
+import * as path from 'path';
 
-import Options, { Settings } from './options';
 import Logger from './logger';
+import Options, { Settings } from './options';
 import version from './version';
+
+export enum RequestVerbs {
+  GET = 'GET',
+  POST = 'POST',
+}
+
+export interface IRequestOptions {
+  method: RequestVerbs;
+  uri: string;
+  headers?: any;
+  proxy?: string;
+}
 
 enum Os {
   Linux = 'linux',
@@ -81,7 +93,7 @@ export default class Dependencies {
   }
 
   private createCoreUrl(): void {
-    version(this.getCoreLocation(), currentCoreVersion => {
+    version(this.getCoreLocation(), this.logger, currentCoreVersion => {
       this.coreInstallUrl = `${this.apiUrl}?current_version=${currentCoreVersion}&os=${
         this.os
       }&arch=${this.arch}`;
@@ -111,7 +123,6 @@ export default class Dependencies {
   }
 
   private installOrUpdateCore(callback: () => void): void {
-    this.logger.info('Downloading hackerlog core...');
     this.getLatestVersionUrl(url => {
       this.logger.info('Downloading hackerlog core...');
       const zipFile = this.dirname + path.sep + 'core.zip';
@@ -150,45 +161,50 @@ export default class Dependencies {
 
   private async getLatestVersionUrl(callback: (string) => void): Promise<void> {
     const request = await import('request');
-    this.options.getSetting(Settings.Proxy, proxy => {
-      let options = {
-        method: 'GET',
-        uri: this.coreInstallUrl,
-      };
+    await this.options.getSetting(Settings.Proxy, async proxy => {
+      await this.options.getSetting(Settings.EditorKey, editorKey => {
+        const options: IRequestOptions = {
+          method: RequestVerbs.GET,
+          uri: this.coreInstallUrl,
+          headers: {
+            'X-Hackerlog-EditorToken': editorKey,
+          },
+        };
 
-      if (proxy && proxy.trim()) {
-        options['proxy'] = proxy.trim();
-      }
-
-      request(options, (err, resp) => {
-        if (err) {
-          this.logger.error(err);
+        if (proxy && proxy.trim()) {
+          options.proxy = proxy.trim();
         }
-        const body = JSON.parse(resp.body);
-        callback(body.download);
+
+        request(options, (err, _, body) => {
+          if (err) {
+            this.logger.error(err);
+          }
+          const parsedBody = JSON.parse(body);
+          callback(parsedBody.download);
+        });
       });
     });
   }
 
   private async downloadFile(url: string, outputFile: string, callback: () => void): Promise<void> {
     const request = await import('request');
-    this.options.getSetting(Settings.Proxy, proxy => {
-      let options = {
-        method: 'GET',
+    await this.options.getSetting(Settings.Proxy, proxy => {
+      const options: IRequestOptions = {
+        method: RequestVerbs.GET,
         uri: url,
       };
 
       if (proxy && proxy.trim()) {
-        options['proxy'] = proxy.trim();
+        options.proxy = proxy.trim();
       }
 
       this.logger.info(JSON.stringify(options));
 
-      let r = request(options);
-      let out = fs.createWriteStream(outputFile);
+      const r = request(options);
+      const out = fs.createWriteStream(outputFile);
       r.pipe(out);
-      return r.on('end', function() {
-        return out.on('finish', function() {
+      return r.on('end', () => {
+        return out.on('finish', () => {
           if (callback !== null) {
             return callback();
           }
@@ -201,7 +217,7 @@ export default class Dependencies {
     if (fs.existsSync(file)) {
       try {
         const AdmZip = await import('adm-zip');
-        let zip = new AdmZip(file);
+        const zip = new AdmZip(file);
         zip.extractAllTo(outputDir, true);
         if (!Dependencies.isWindows()) {
           fs.chmodSync(outputDir + '/core', '755');
@@ -209,7 +225,7 @@ export default class Dependencies {
       } catch (e) {
         return this.logger.error(e);
       } finally {
-        fs.unlink(file, unlinkError => {
+        fs.unlink(file, _ => {
           if (callback) {
             return callback();
           }

@@ -7,6 +7,8 @@
 		"no-string-throw": true,
 		"no-unused-expression": true,
 		"no-duplicate-variable": true,
+		"object-literal-sort-keys": false,
+		"ordered-imports": false,
 		"curly": true,
 		"class-name": true,
 		"semicolon": [
