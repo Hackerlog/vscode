@@ -7,6 +7,7 @@ import Dependencies from './dependencies';
 import Logger, { Levels } from './logger';
 import Options, { Settings } from './options';
 import Pulse from './pulse';
+import { apiBaseUrl } from './constants';
 
 export default class Hackerlog {
   private vscode;
@@ -18,27 +19,29 @@ export default class Hackerlog {
   private lastPulse: number = 0;
   private dependencies: Dependencies;
   private options: Options;
-  private pulseEndpoint = 'http://localhost:8000/v1/units';
+  private pulseEndpoint = `${apiBaseUrl}/units`;
 
-  constructor({ vscode, logger, options }) {
-    this.vscode = vscode;
+  constructor({ vscodeInstance, logger, options }) {
+    this.vscode = vscodeInstance;
     this.logger = logger;
     this.options = options;
-    this.extension = vscode.extensions.getExtension('hackerlog.hackerlog').packageJSON;
-    this.statusBar = vscode.StatusBarItem = vscode.window.createStatusBarItem(
-      vscode.StatusBarAlignment.Left
+    this.extension = this.vscode.extensions.getExtension('hackerlog.hackerlog').packageJSON;
+    this.statusBar = this.vscode.StatusBarItem = this.vscode.window.createStatusBarItem(
+      this.vscode.StatusBarAlignment.Left
     );
   }
 
-  public initialize(): void {
+  public async initialize(): Promise<void> {
     this.logger.debug('Initializing Hackerlog v' + this.extension.version);
     this.statusBar.text = '$(clock) Hackerlog Initializing...';
     this.statusBar.show();
 
-    this.checkApiKey();
+    // 1. See if the Editor Key is available. If it is, proceed. If not, prompt for it.
+    await this.checkEditorToken();
 
     this.dependencies = new Dependencies(this.options, this.logger);
-    this.dependencies.checkAndInstall(async () => {
+
+    await this.dependencies.installOrUpdateCore(async () => {
       this.statusBar.text = '$(clock)';
       this.statusBar.tooltip = 'Hackerlog: Initialized';
       await this.options.getSetting(Settings.StatusBarIcon, val => {
@@ -50,7 +53,7 @@ export default class Hackerlog {
       });
     });
 
-    this.setupEventListeners();
+    await this.setupEventListeners();
   }
 
   public async promptForEditorToken(): Promise<void> {
@@ -65,9 +68,13 @@ export default class Hackerlog {
         ignoreFocusOut: true,
         validateInput: this.validateKey.bind(this),
       };
-      this.vscode.window.showInputBox(promptOptions).then(val => {
+      this.vscode.window.showInputBox(promptOptions).then(async val => {
         if (this.validateKey(val) === null) {
-          this.options.setSetting(Settings.EditorKey, val);
+          try {
+            await this.options.setSetting(Settings.EditorKey, val);
+          } catch (err) {
+            this.logger.warn(err);
+          }
         }
       });
     });
@@ -85,9 +92,13 @@ export default class Hackerlog {
         ignoreFocusOut: true,
         validateInput: this.validateProxy.bind(this),
       };
-      this.vscode.window.showInputBox(promptOptions).then(val => {
+      this.vscode.window.showInputBox(promptOptions).then(async val => {
         if (val || val === '') {
-          this.options.setSetting(Settings.Proxy, val);
+          try {
+            await this.options.setSetting(Settings.Proxy, val);
+          } catch (err) {
+            this.logger.warn(err);
+          }
         }
       });
     });
@@ -104,11 +115,15 @@ export default class Hackerlog {
         value: defaultVal,
         ignoreFocusOut: true,
       };
-      this.vscode.window.showQuickPick(items, promptOptions).then(newVal => {
+      this.vscode.window.showQuickPick(items, promptOptions).then(async newVal => {
         if (newVal === null) {
           return;
         }
-        this.options.setSetting(Settings.Debug, newVal);
+        try {
+          await this.options.setSetting(Settings.Debug, newVal);
+        } catch (err) {
+          this.logger.warn(err);
+        }
         if (newVal === 'true') {
           this.logger.setLevel(Levels.debug);
           this.logger.debug('Debug enabled');
@@ -130,11 +145,15 @@ export default class Hackerlog {
         value: defaultVal,
         ignoreFocusOut: true,
       };
-      this.vscode.window.showQuickPick(items, promptOptions).then(newVal => {
+      this.vscode.window.showQuickPick(items, promptOptions).then(async newVal => {
         if (newVal === null) {
           return;
         }
-        this.options.setSetting(Settings.StatusBarIcon, newVal);
+        try {
+          await this.options.setSetting(Settings.StatusBarIcon, newVal);
+        } catch (err) {
+          this.logger.warn(err);
+        }
         if (newVal === 'true') {
           this.statusBar.show();
           this.logger.debug('Status bar icon enabled');
@@ -201,21 +220,28 @@ export default class Hackerlog {
     return null;
   }
 
-  private checkApiKey(): void {
-    this.hasEditorToken(hasApiKey => {
-      if (!hasApiKey) {
+  private async checkEditorToken(): Promise<void> {
+    await this.hasEditorToken(hasEditorToken => {
+      this.logger.debug('Has editor token: ' + hasEditorToken);
+      if (!hasEditorToken) {
         this.promptForEditorToken();
       }
     });
   }
 
-  private hasEditorToken(callback: (boolean, string) => void): void {
-    this.options.getSetting(Settings.EditorKey, editorKey => {
-      callback(editorKey !== null, editorKey);
-    });
+  private async hasEditorToken(
+    callback: (hasToken: boolean, editorToken: string) => void
+  ): Promise<void> {
+    try {
+      await this.options.getSetting(Settings.EditorKey, editorKey => {
+        callback(!!editorKey, editorKey);
+      });
+    } catch (err) {
+      this.logger.error('Could not retrieve editor token from config: ', err);
+    }
   }
 
-  private setupEventListeners(): void {
+  private async setupEventListeners(): Promise<void> {
     // subscribe to selection change and editor activation events
     const subscriptions: vscode.Disposable[] = [];
     this.vscode.window.onDidChangeTextEditorSelection(this.onChange, this, subscriptions);
@@ -224,17 +250,19 @@ export default class Hackerlog {
 
     // create a combined disposable from both event subscriptions
     this.disposable = this.vscode.Disposable.from(...subscriptions);
+
+    this.logger.debug('Event listeners are setup.');
   }
 
-  private onChange(): void {
-    this.onEvent(false);
+  private async onChange(): Promise<void> {
+    await this.onEvent(false);
   }
 
-  private onSave(): void {
-    this.onEvent(true);
+  private async onSave(): Promise<void> {
+    await this.onEvent(true);
   }
 
-  private onEvent(isWrite: boolean): void {
+  private async onEvent(isWrite: boolean): Promise<void> {
     const editor = this.vscode.window.activeTextEditor;
     if (editor) {
       const doc = editor.document;
@@ -243,7 +271,8 @@ export default class Hackerlog {
         if (file) {
           const time: number = Date.now();
           if (isWrite || this.enoughTimePassed(time) || this.lastFile !== file) {
-            this.sendPulse(file, isWrite);
+            this.logger.debug('Sending a pulse for: ' + file);
+            await this.sendPulse(file, isWrite);
             this.lastFile = file;
             this.lastPulse = time;
           }
@@ -252,83 +281,83 @@ export default class Hackerlog {
     }
   }
 
-  private sendPulse(file: string, isWrite): void {
+  private async sendPulse(file: string, isWrite): Promise<void> {
     this.logger.info(isWrite);
-    this.hasEditorToken((hasEditorToken, editorToken) => {
+    await this.hasEditorToken((hasEditorToken, editorToken) => {
       if (hasEditorToken) {
-        this.dependencies.checkAndCreateHomeDir(coreIsInstalled => {
-          if (coreIsInstalled) {
-            const coreLocation = this.dependencies.getCoreLocation();
-            const splitFile = file.split(path.sep);
-            const fileName = splitFile[splitFile.length - 1];
+        const coreIsInstalled = this.dependencies.isCoreInstalled();
+        if (coreIsInstalled) {
+          const coreLocation = this.dependencies.getCoreLocation();
+          const splitFile = file.split(path.sep);
+          const fileName = splitFile[splitFile.length - 1];
 
-            const flags = {
-              apiUrl: this.pulseEndpoint,
-              editorToken,
-              editorType: 'vscode',
-              fileName,
-              projectName: this.getProjectName(file),
-              startedAt: new Date(this.lastPulse).toISOString(),
-              stoppedAt: new Date().toISOString(),
-            };
+          const flags = {
+            apiUrl: this.pulseEndpoint,
+            editorToken,
+            editorType: 'vscode',
+            fileName,
+            projectName: this.getProjectName(file),
+            startedAt: new Date(this.lastPulse).toISOString(),
+            stoppedAt: new Date().toISOString(),
+          };
 
-            const pulse = new Pulse({
-              flags,
-              coreLocation,
-              logger: this.logger,
-            });
+          const pulse = new Pulse({
+            flags,
+            coreLocation,
+            logger: this.logger,
+          });
 
-            pulse.run(process => {
-              process.on('close', (code, _) => {
-                if (code === 0) {
-                  this.statusBar.text = '$(clock)';
-                  const today = new Date();
-                  this.statusBar.tooltip =
-                    'Hackerlog: Last heartbeat sent ' + this.formatDate(today);
-                } else if (code === 102) {
-                  this.statusBar.text = '$(clock)';
-                  this.statusBar.tooltip =
-                    'Hackerlog: Working offline... coding activity will sync next time we are online.';
-                  this.logger.warn(
-                    'API Error (102); Check your ' +
-                      this.options.getLogFile() +
-                      ' file for more details.'
-                  );
-                } else if (code === 103) {
-                  this.statusBar.text = '$(clock) Hackerlog Error';
-                  const error_msg =
-                    'Config Parsing Error (103); Check your ' +
+          pulse.run(process => {
+            process.on('close', (code, _) => {
+              if (code === 0) {
+                this.statusBar.text = '$(clock)';
+                const today = new Date();
+                this.statusBar.tooltip = 'Hackerlog: Last heartbeat sent ' + this.formatDate(today);
+              } else if (code === 102) {
+                this.statusBar.text = '$(clock)';
+                this.statusBar.tooltip =
+                  'Hackerlog: Working offline... coding activity will sync next time we are online.';
+                this.logger.warn(
+                  'API Error (102); Check your ' +
                     this.options.getLogFile() +
-                    ' file for more details.';
-                  this.statusBar.tooltip = 'Hackerlog: ' + error_msg;
-                  this.logger.error(error_msg);
-                } else if (code === 104) {
-                  this.statusBar.text = '$(clock) Hackerlog Error';
-                  const error_msg = 'Invalid API Key (104); Make sure your API Key is correct!';
-                  this.statusBar.tooltip = 'Hackerlog: ' + error_msg;
-                  this.logger.error(error_msg);
-                } else {
-                  this.statusBar.text = '$(clock) Hackerlog Error';
-                  const error_msg =
-                    'Unknown Error (' +
-                    code +
-                    '); Check your ' +
-                    this.options.getLogFile() +
-                    ' file for more details.';
-                  this.statusBar.tooltip = 'Hackerlog: ' + error_msg;
-                  this.logger.error(error_msg);
-                }
-              });
+                    ' file for more details.'
+                );
+              } else if (code === 103) {
+                this.statusBar.text = '$(clock) Hackerlog Error';
+                const errorMessage =
+                  'Config Parsing Error (103); Check your ' +
+                  this.options.getLogFile() +
+                  ' file for more details.';
+                this.statusBar.tooltip = 'Hackerlog: ' + errorMessage;
+                this.logger.error(errorMessage);
+              } else if (code === 104) {
+                this.statusBar.text = '$(clock) Hackerlog Error';
+                const errorMessage = 'Invalid API Key (104); Make sure your API Key is correct!';
+                this.statusBar.tooltip = 'Hackerlog: ' + errorMessage;
+                this.logger.error(errorMessage);
+              } else {
+                this.statusBar.text = '$(clock) Hackerlog Error';
+                const errorMessage =
+                  'Unknown Error (' +
+                  code +
+                  '); Check your ' +
+                  this.options.getLogFile() +
+                  ' file for more details.';
+                this.statusBar.tooltip = 'Hackerlog: ' + errorMessage;
+                this.logger.error(errorMessage);
+              }
             });
-          }
-        });
+          });
+        } else {
+          this.logger.info('Core is not installed but a pulse was attempted.');
+        }
       } else {
         this.promptForEditorToken();
       }
     });
   }
 
-  private formatDate(date: Date): String {
+  private formatDate(date: Date): string {
     const months = [
       'Jan',
       'Feb',
@@ -387,17 +416,5 @@ export default class Hackerlog {
       }
     }
     return defaultName;
-  }
-
-  // TODO: Maybe use this?
-  private obfuscateKey(key: string): string {
-    let newKey = '';
-    if (key) {
-      newKey = key;
-      if (key.length > 4) {
-        newKey = 'XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXX' + key.substring(key.length - 4);
-      }
-    }
-    return newKey;
   }
 }

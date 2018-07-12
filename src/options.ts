@@ -1,5 +1,4 @@
-import * as fs from 'fs';
-import { readJson } from 'fs-extra';
+import { readJson, outputJson, ensureFileSync } from 'fs-extra';
 import { noop, get, assign } from 'lodash';
 import * as path from 'path';
 
@@ -21,31 +20,38 @@ interface ISettings {
 }
 
 export default class Options {
-  private configFile = path.join(this.getHome(), '.hackerlog.config.json');
+  private configFile = path.join(this.getHome(), '.hackerlog.conf');
   private logFile = path.join(this.getHome(), '.hackerlog.log');
   private settings: ISettings | null = null;
   private logger: Logger;
 
   public constructor(logger: Logger) {
     this.logger = logger;
+    ensureFileSync(this.getConfigFile());
   }
 
-  public async getSetting(key: Settings, callback: (string?, any?) => void = noop): Promise<void> {
-    const content = await readJson(this.getConfigFile());
-    callback(get(content, key));
+  public async getSetting(key: Settings, callback: (val?: string) => void = noop): Promise<void> {
+    try {
+      const content = await readJson(this.getConfigFile(), { throws: false });
+      callback(get(content, key));
+    } catch (err) {
+      this.logger.warn('Could not get settings: ' + err);
+    }
   }
 
-  // TODO: Update this with the fs-extra method
-  public setSetting(key: Settings, val: string, callback: (Error) => void = noop): void {
-    const content = assign({}, this.settings, { [key]: val });
-
-    fs.writeFile(this.getConfigFile(), JSON.stringify(content, null, 4), function(err) {
-      if (err) {
-        callback(new Error('could not write to ' + this.getConfigFile()));
-      } else {
-        callback(null);
-      }
-    });
+  public async setSetting(
+    key: Settings,
+    val: string,
+    callback: (Error) => void = noop
+  ): Promise<void> {
+    try {
+      const content = assign({}, this.settings, { [key]: val });
+      await outputJson(this.getConfigFile(), content);
+      callback(null);
+    } catch (err) {
+      callback(new Error('could not write to ' + this.getConfigFile()));
+      this.logger.error('Could not write settings file: ', err);
+    }
   }
 
   public getConfigFile(): string {

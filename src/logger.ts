@@ -1,3 +1,4 @@
+// tslint:disable:no-console
 import { get } from 'lodash';
 import * as Raven from 'raven';
 
@@ -21,32 +22,6 @@ export default class Logger {
   constructor(level: Levels, vscode) {
     this.setLevel(level);
     this.initSentry(vscode);
-  }
-
-  private initSentry(vscode): void {
-    if (!this.isDebugging) {
-      Raven.config(
-        'https://0f033463374047f3ba843c0a8d84ee68:72e61a3d48a949b093dd4574bb6ca79b@sentry.io/1239966',
-        {
-          release: this.getVersion(vscode),
-          tags: {
-            os: process.platform,
-            arch: process.arch,
-          },
-        }
-      ).install();
-    }
-  }
-
-  private getVersion(vscode): string {
-    const packageJson = vscode.extensions.getExtension('hackerlog.hackerlog').packageJSON;
-    return get(packageJson, 'version');
-  }
-
-  private sendToSentry(msg: string): void {
-    if (!this.isDebugging) {
-      Raven.captureMessage(msg);
-    }
   }
 
   public setLevel(level: Levels): void {
@@ -89,6 +64,32 @@ export default class Logger {
     this.sendToSentry(msg);
     if (err && !this.isDebugging) {
       Raven.captureException(err);
+    }
+  }
+
+  private initSentry(vscode): void {
+    if (!this.isDebugging) {
+      Raven.config(
+        'https://0f033463374047f3ba843c0a8d84ee68:72e61a3d48a949b093dd4574bb6ca79b@sentry.io/1239966',
+        {
+          release: this.getVersion(vscode),
+          tags: {
+            os: process.platform,
+            arch: process.arch,
+          },
+        }
+      ).install();
+    }
+  }
+
+  private getVersion(vscode): string {
+    const packageJson = vscode.extensions.getExtension('hackerlog.hackerlog').packageJSON;
+    return get(packageJson, 'version');
+  }
+
+  private sendToSentry(msg: string): void {
+    if (!this.isDebugging) {
+      Raven.captureMessage(msg);
     }
   }
 }

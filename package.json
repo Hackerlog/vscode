@@ -1,72 +1,73 @@
 {
-    "name": "hackerlog",
-    "displayName": "Hackerlog",
-    "description": "",
-    "version": "0.0.1",
-    "publisher": "hackerlog",
-    "engines": {
-        "vscode": "^1.25.0"
-    },
-    "categories": [
-        "Other"
-    ],
-    "activationEvents": [
-        "*"
-    ],
-    "repository": {
-        "type": "git",
-        "url": "https://github.com/Hackerlog/vscode"
-    },
-    "main": "./dist/index",
-    "scripts": {
-        "vscode:prepublish": "yarn build",
-        "build": "tsc -p ./",
-        "watch": "tsc -watch -p ./",
-        "postinstall": "node ./node_modules/vscode/bin/install",
-        "test": "yarn build && node ./node_modules/vscode/bin/test",
-        "lint": "tslint -p tsconfig.json",
-        "lint:fix": "tslint -p tsconfig.json --fix"
-    },
-    "devDependencies": {
-        "@types/jest": "^23.1.4",
-        "@types/lodash": "^4.14.111",
-        "@types/node": "^7.0.43",
-        "jest": "^23.3.0",
-        "tslint": "^5.8.0",
-        "tslint-config-prettier": "^1.13.0",
-        "typescript": "^2.6.1",
-        "vscode": "^1.1.6"
-    },
-    "dependencies": {
-        "adm-zip": "^0.4.11",
-        "fs-extra": "^6.0.1",
-        "lodash": "^4.17.10",
-        "raven": "^2.6.3",
-        "request": "^2.87.0",
-        "rimraf": "^2.6.2"
-    },
-    "contributes": {
-        "commands": [
-            {
-                "command": "hackerlog.editorKey",
-                "title": "Hackerlog Editor Key"
-            },
-            {
-                "command": "hackerlog.proxy",
-                "title": "Hackerlog Proxy"
-            },
-            {
-                "command": "hackerlog.debug",
-                "title": "Hackerlog Debug"
-            },
-            {
-                "command": "hackerlog.statusBarIcon",
-                "title": "Hackerlog Status Bar Icon"
-            },
-            {
-                "command": "hackerlog.dashboard",
-                "title": "Hackerlog Dashboard"
-            }
-        ]
-    }
+  "name": "hackerlog",
+  "displayName": "Hackerlog",
+  "description": "",
+  "version": "0.0.1",
+  "publisher": "hackerlog",
+  "engines": {
+    "vscode": "^1.25.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "activationEvents": [
+    "*"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Hackerlog/vscode"
+  },
+  "main": "./dist/index",
+  "scripts": {
+    "vscode:prepublish": "yarn build",
+    "build": "ENV=production tsc -p ./",
+    "build:debug": "ENV=debug tsc -p ./",
+    "watch": "ENV=debug tsc -watch -p ./",
+    "postinstall": "node ./node_modules/vscode/bin/install",
+    "test": "yarn build && node ./node_modules/vscode/bin/test",
+    "lint": "tslint -p tsconfig.json",
+    "lint:fix": "tslint -p tsconfig.json --fix"
+  },
+  "dependencies": {
+    "adm-zip": "^0.4.11",
+    "fs-extra": "^6.0.1",
+    "lodash": "^4.17.10",
+    "raven": "^2.6.3",
+    "request": "^2.87.0",
+    "rimraf": "^2.6.2",
+    "vscode": "^1.1.6"
+  },
+  "devDependencies": {
+    "@types/jest": "^23.1.4",
+    "@types/lodash": "^4.14.111",
+    "@types/node": "^7.0.43",
+    "jest": "^23.3.0",
+    "tslint": "^5.8.0",
+    "tslint-config-prettier": "^1.13.0",
+    "typescript": "^2.6.1"
+  },
+  "contributes": {
+    "commands": [
+      {
+        "command": "hackerlog.editorKey",
+        "title": "Hackerlog Editor Key"
+      },
+      {
+        "command": "hackerlog.proxy",
+        "title": "Hackerlog Proxy"
+      },
+      {
+        "command": "hackerlog.debug",
+        "title": "Hackerlog Debug"
+      },
+      {
+        "command": "hackerlog.statusBarIcon",
+        "title": "Hackerlog Status Bar Icon"
+      },
+      {
+        "command": "hackerlog.dashboard",
+        "title": "Hackerlog Dashboard"
+      }
+    ]
+  }
 }

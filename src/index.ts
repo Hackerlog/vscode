@@ -5,6 +5,7 @@ import * as vscode from 'vscode';
 import Hackerlog from './hackerlog';
 import Logger, { Levels } from './logger';
 import Options, { Settings } from './options';
+import { isProd } from './constants';
 
 let logger: Logger;
 let options: Options;
@@ -16,7 +17,7 @@ export function activate(ctx: vscode.ExtensionContext) {
   options = new Options(logger);
 
   const hackerlog = new Hackerlog({
-    vscode,
+    vscodeInstance: vscode,
     logger,
     options,
   });
@@ -55,7 +56,7 @@ export function activate(ctx: vscode.ExtensionContext) {
   ctx.subscriptions.push(hackerlog);
 
   options.getSetting(Settings.Debug, debug => {
-    if (debug || process.env.IS_DEBUG === 'true') {
+    if (debug || !isProd) {
       logger.setLevel(Levels.debug);
     }
     hackerlog.initialize();

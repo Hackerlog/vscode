@@ -1,7 +1,11 @@
 import * as child_process from 'child_process';
 import Logger from './logger';
 
-export default (coreLocation: string, logger: Logger, callback: (string) => void): void => {
+export default (
+  coreLocation: string,
+  logger: Logger,
+  callback: (version: string) => void
+): void => {
   child_process.execFile(coreLocation, ['-v'], (error, stdout, stderr) => {
     if (error !== null) {
       if (stderr && stderr.toString() !== '') {
@@ -13,7 +17,7 @@ export default (coreLocation: string, logger: Logger, callback: (string) => void
       logger.warn(error.toString());
       callback('');
     } else {
-      callback(stdout);
+      callback(stdout.toString().trim());
     }
   });
 };

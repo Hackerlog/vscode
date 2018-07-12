@@ -5,6 +5,7 @@ import * as path from 'path';
 import Logger from './logger';
 import Options, { Settings } from './options';
 import version from './version';
+import { apiBaseUrl } from './constants';
 
 export enum RequestVerbs {
   GET = 'GET',
@@ -32,11 +33,14 @@ enum Arch {
 }
 
 export default class Dependencies {
+  public static isWindows(): boolean {
+    return os.type() === 'Windows_NT';
+  }
+
   private options: Options;
   private logger: Logger;
   private dirname = __dirname;
-  private homeDir: string;
-  private apiUrl = 'http://localhost:8000/v1/core/version';
+  private apiUrl = `${apiBaseUrl}/core/version`;
   private coreInstallUrl: string;
   private os: Os;
   private arch: Arch;
@@ -44,11 +48,37 @@ export default class Dependencies {
   constructor(options: Options, logger: Logger) {
     this.options = options;
     this.logger = logger;
-    this.homeDir = path.resolve(os.homedir(), '.hackerlog');
     this.os = this.getOs();
     this.arch = this.getArch();
 
     this.createCoreUrl();
+  }
+
+  public getCoreLocation(): string {
+    return Dependencies.isWindows()
+      ? `${this.dirname}${path.sep}core.exe`
+      : `${this.dirname}${path.sep}core`;
+  }
+
+  public isCoreInstalled(): boolean {
+    const installed = fs.existsSync(this.getCoreLocation());
+    this.logger.info('Core is installed: ' + installed);
+    return installed;
+  }
+
+  public async installOrUpdateCore(callback: () => void): Promise<void> {
+    await this.getLatestVersionUrl(async (url, isLatestVersion) => {
+      if (isLatestVersion) {
+        this.logger.debug('On the latest version of core. Not downloading.');
+        callback();
+      } else {
+        this.logger.info('Downloading hackerlog core: ' + url);
+        const zipFile = this.dirname + path.sep + 'core.zip';
+        await this.downloadFile(url, zipFile, async () => {
+          await this.extractCore(zipFile, callback);
+        });
+      }
+    });
   }
 
   private getOs(): Os {
@@ -93,49 +123,16 @@ export default class Dependencies {
   }
 
   private createCoreUrl(): void {
-    version(this.getCoreLocation(), this.logger, currentCoreVersion => {
-      this.coreInstallUrl = `${this.apiUrl}?current_version=${currentCoreVersion}&os=${
-        this.os
-      }&arch=${this.arch}`;
+    version(this.getCoreLocation(), this.logger, currentVersion => {
+      const params = `currentVersion=${currentVersion}&os=${this.os}&arch=${this.arch}`;
+      this.coreInstallUrl = `${this.apiUrl}?${params}`;
     });
   }
 
-  public checkAndInstall(callback: () => void): void {
-    this.checkAndCreateHomeDir(() => {
-      this.installOrUpdateCore(callback);
-    });
-  }
-
-  public getCoreLocation(): string {
-    return Dependencies.isWindows()
-      ? `${this.dirname}${path.sep}core.exe`
-      : `${this.dirname}${path.sep}core`;
-  }
-
-  public static isWindows(): boolean {
-    return os.type() === 'Windows_NT';
-  }
-
-  private isCoreInstalled(): boolean {
-    const installed = fs.existsSync(this.getCoreLocation());
-    this.logger.info('Core is installed: ' + installed);
-    return installed;
-  }
-
-  private installOrUpdateCore(callback: () => void): void {
-    this.getLatestVersionUrl(url => {
-      this.logger.info('Downloading hackerlog core...');
-      const zipFile = this.dirname + path.sep + 'core.zip';
-      this.downloadFile(url, zipFile, () => {
-        this.extractCore(zipFile, callback);
-      });
-    });
-  }
-
-  private extractCore(zipFile: string, callback: () => void): void {
-    this.logger.debug(`Extracting hackerlog-core into ${this.dirname}...`);
-    this.removeCore(() => {
-      this.unzip(zipFile, this.dirname, callback);
+  private async extractCore(zipFile: string, callback: () => void): Promise<void> {
+    this.logger.debug(`Extracting hackerlog core into ${this.dirname}...`);
+    await this.removeCore(async () => {
+      await this.unzip(zipFile, this.dirname, callback);
       this.logger.debug('Finished extracting hackerlog core.');
     });
   }
@@ -159,7 +156,10 @@ export default class Dependencies {
     }
   }
 
-  private async getLatestVersionUrl(callback: (string) => void): Promise<void> {
+  private async getLatestVersionUrl(
+    callback: (download: string, latest: boolean) => void
+  ): Promise<void> {
+    this.logger.info('Making sure core is the latest.');
     const request = await import('request');
     await this.options.getSetting(Settings.Proxy, async proxy => {
       await this.options.getSetting(Settings.EditorKey, editorKey => {
@@ -180,7 +180,9 @@ export default class Dependencies {
             this.logger.error(err);
           }
           const parsedBody = JSON.parse(body);
-          callback(parsedBody.download);
+          const { download, latest } = parsedBody;
+
+          callback(download, latest);
         });
       });
     });
@@ -198,17 +200,13 @@ export default class Dependencies {
         options.proxy = proxy.trim();
       }
 
-      this.logger.info(JSON.stringify(options));
-
       const r = request(options);
       const out = fs.createWriteStream(outputFile);
       r.pipe(out);
       return r.on('end', () => {
-        return out.on('finish', () => {
-          if (callback !== null) {
-            return callback();
-          }
-        });
+        if (callback !== null) {
+          return callback();
+        }
       });
     });
   }
@@ -232,21 +230,5 @@ export default class Dependencies {
         });
       }
     }
-  }
-
-  public checkAndCreateHomeDir(callback: (boolean) => void): void {
-    this.logger.info('Checking and creating home dir.');
-    fs.stat(this.homeDir, err => {
-      if (err && err.errno === 34) {
-        fs.mkdir(this.homeDir, err2 => {
-          if (err2) {
-            this.logger.error(err2.message);
-            callback(this.isCoreInstalled());
-          }
-        });
-      } else {
-        callback(this.isCoreInstalled());
-      }
-    });
   }
 }
